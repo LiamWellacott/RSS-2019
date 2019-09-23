@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>px100_description</name>
+  <version>0.0.1</version>
+  <description>
+    3D models of the px100 robot arm for simulation and visualization
+  </description>
+  <license>Apache 2.0</license>
+  <author email="pon1@hw.ac.uk">Pierre</author>
+  <maintainer email="pon1@hw.ac.uk">Pierre</maintainer>
+  <!--<url type="repository">https://github.com/ROBOTIS-GIT/turtlebot3</url>-->
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>urdf</depend>
+  <depend>xacro</depend>
+</package>
