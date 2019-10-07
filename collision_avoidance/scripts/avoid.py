@@ -6,8 +6,14 @@ from geometry_msgs.msg import Twist
 from numpy import concatenate
 import numpy as np
 
-lin = 0.5 #todo put in constants
-turn = 0
+SPEED=0.5
+ANGULAR_SPEED=0.5
+OBS_ANGLE=45
+DETECT_RANGE=0.35
+SELF_BODY=0.12
+
+lin = SPEED #todo put in constants
+turn = ANGULAR_SPEED
 turning = False
 
 def left():
@@ -15,7 +21,7 @@ def left():
     global turn
 
     rospy.loginfo("turning left")
-    turn = 0.5
+    turn = ANGULAR_SPEED
     lin = 0
 
 def right():
@@ -23,7 +29,7 @@ def right():
     global turn
 
     rospy.loginfo("turning right")
-    turn = -0.5
+    turn = -ANGULAR_SPEED
     lin = 0
 
 def forward():
@@ -32,25 +38,20 @@ def forward():
 
     rospy.loginfo("going forward")
     turn = 0
-    lin = 0.5
+    lin = SPEED
 
 def scanCallback(msg):
-   
     global turning
-
-    front_laser_left = msg.ranges[0:20]
-    front_laser_right = msg.ranges[340:359]
+    front_laser_left = msg.ranges[:OBS_ANGLE]
+    front_laser_right = msg.ranges[-OBS_ANGLE:]
     front_laser=np.concatenate((front_laser_left,front_laser_right),axis=None)
-    #rospy.loginfo(front_laser)
     left_laser = msg.ranges[89]
     right_laser = msg.ranges[269]
-
-    rospy.loginfo("new data")
 
     # if we detect an object and not turning
     if not turning:
         for i in front_laser:
-            if i > 0.12 and i < 0.4: 
+            if i > SELF_BODY and i < DETECT_RANGE:
                 rospy.loginfo("starting to turn")
                 #start turning
                 turning = True
@@ -70,7 +71,7 @@ def scanCallback(msg):
     if turning:
 	safe_to_go_forward = True
 	for i in front_laser:
-		if i > 0.12 and i < 0.5:
+		if i > SELF_BODY and i < DETECT_RANGE:
 			safe_to_go_forward = False
 
 	if safe_to_go_forward:
