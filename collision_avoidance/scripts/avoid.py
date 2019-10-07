@@ -9,6 +9,7 @@ import numpy as np
 SPEED=0.5
 ANGULAR_SPEED=0.5
 OBS_ANGLE=45
+SIDE_ANGLES=5
 DETECT_RANGE=0.35
 SELF_BODY=0.12
 
@@ -45,8 +46,8 @@ def scanCallback(msg):
     front_laser_left = msg.ranges[:OBS_ANGLE]
     front_laser_right = msg.ranges[-OBS_ANGLE:]
     front_laser=np.concatenate((front_laser_left,front_laser_right),axis=None)
-    left_laser = msg.ranges[89]
-    right_laser = msg.ranges[269]
+    left_laser = np.mean(msg.ranges[89-SIDE_ANGLE:89+SIDE_ANGLE])
+    right_laser = np.mean(msg.ranges[269-SIDE_ANGLE:269+SIDE_ANGLE])
 
     # if we detect an object and not turning
     if not turning:
