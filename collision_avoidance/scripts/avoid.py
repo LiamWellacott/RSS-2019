@@ -56,9 +56,9 @@ def scanCallback(msg):
                 turning = True
                 # if left is closer to you (smaller sensor value)
                 # go this direction until free
-                if (left_laser>0.10) and left_laser > right_laser:
+                if left_laser > right_laser:
                     left()
-                elif right_laser>0.10 and left_laser < right_laser:
+                elif left_laser < right_laser:
                     right()
                 else: # noisy sensor decision
                     left()
@@ -67,11 +67,17 @@ def scanCallback(msg):
 
    
     # if we are already turning (higher threshold than initial turning)
-    if turning and front_laser[0] > 0.5:
-        rospy.loginfo("finishing turn")
-        # we exceeded threshold of space in front, go forward
-        forward()
-        turning = False
+    if turning:
+	safe_to_go_forward = True
+	for i in front_laser:
+		if i > 0.12 and i < 0.5:
+			safe_to_go_forward = False
+
+	if safe_to_go_forward:
+        	rospy.loginfo("finishing turn")
+        	# we exceeded threshold of space in front, go forward
+        	forward()
+        	turning = False
 
 
 def move_motor(pub):
