@@ -62,6 +62,9 @@ class RobotController:
         return max(min(alpha*dist, self.MAX_LIN_SPEED),
                    self.MIN_LIN_SPEED)
  
+    '''
+    sets the target yaw for the robot relative to current yaw by 'degrees' 
+    '''
     def turn(self, degrees):
 
         # TODO reject which are not in range -pi to pi
@@ -92,7 +95,7 @@ class RobotController:
         self._stop()
             
     '''
-    moves the robot 'meters' in the current orientation
+    sets the target point for the robot 'meters' forward in the current orientation
     '''
     def move(self, meters):
 
