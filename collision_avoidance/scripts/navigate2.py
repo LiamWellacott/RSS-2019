@@ -7,6 +7,7 @@ from geometry_msgs.msg import Twist
 from tf2_msgs.msg import TFMessage
 from numpy import concatenate
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class RobotController:
@@ -54,21 +55,62 @@ class RobotController:
                         self.MAX_TURN_SPEED),
                     self.MIN_TURN_SPEED)
 
+    def getAngSpeed2(self, init_yaw, target_yaw, alpha):
+        speed_goal = max(min(alpha*(np.abs(target_yaw - self.current_yaw)),
+                             self.MAX_TURN_SPEED),
+                         self.MIN_TURN_SPEED)
+        speed_start = max(min(alpha*(np.abs(init_yaw - self.current_yaw)),
+                             self.MAX_TURN_SPEED),
+                         self.MIN_TURN_SPEED)
+        return min(speed_goal, speed_start)
+
     '''
     adjust speed based on distance to the target location, constrained by a max and min speed
     '''
-    def getLinSpeed(self, target_point, alpha):
+    def getLinSpeed(self, init_point, target_point, alpha):
         dist = np.linalg.norm(target_point - self.current_point) 
         return max(min(alpha*dist, self.MAX_LIN_SPEED),
                    self.MIN_LIN_SPEED)
- 
+    
+    def getLinSpeed2(self, init_point, target_point, alpha):
+        dist_goal = np.linalg.norm(target_point - self.current_point)
+        dist_start = np.linalg.norm(init_point - self.current_point)
+        
+        speed_start = max(min(alpha*dist_start, self.MAX_LIN_SPEED),
+                   self.MIN_LIN_SPEED)
+        speed_goal = max(min(alpha*dist_goal, self.MAX_LIN_SPEED),
+                   self.MIN_LIN_SPEED)
+        return min(speed_start, speed_goal)
+
+    def getLinSpeed2plot(self, init_point, target_point, current_point, alpha):
+        dist_goal = np.linalg.norm(target_point - current_point)
+        dist_start = np.linalg.norm(init_point - current_point)
+        
+        speed_start = max(min(alpha*dist_start, self.MAX_LIN_SPEED),
+                   self.MIN_LIN_SPEED)
+        speed_goal = max(min(alpha*dist_goal, self.MAX_LIN_SPEED),
+                   self.MIN_LIN_SPEED)
+        return min(speed_start, speed_goal)
+
+    def plotSpeed(self, alpha):
+        start = 0.0
+        goal = 1.0
+        to_start = np.arange(start, goal, 0.001)
+        speed = np.zeros(to_start.shape)
+        for i,_ in enumerate(to_start):
+            speed[i] = self.getLinSpeed2plot(start, goal, to_start[i], alpha)
+            
+        plt.plot(to_start, speed)
+        plt.show()
+        
     def turn(self, degrees):
 
         # TODO reject which are not in range -pi to pi
 
         # calculate absolute target yaw in range -pi to pi
         target_yaw = self.current_yaw + degrees
-        if target_yaw > np.pi: # overflow pi
+        init_yaw = self.current_yaw
+        if target_yaw > np.pi: # overflow pixs
             target_yaw -= 2*np.pi
         elif target_yaw < -np.pi: # underflow -pi
             target_yaw += 2*np.pi
@@ -81,9 +123,9 @@ class RobotController:
 
             # adjust speed
             if degrees > 0: # if asked to turn right 
-                self._command_motor(0, -self.getAngSpeed(target_yaw, 2))
+                self._command_motor(0, self.getAngSpeed2(init_yaw, target_yaw, 2))
             else:
-                self._command_motor(0, self.getAngSpeed(target_yaw, 2))
+                self._command_motor(0, -self.getAngSpeed2(init_yaw, target_yaw, 2))
 
             self.rate.sleep()
 
@@ -108,7 +150,7 @@ class RobotController:
         # making the function blocking until the end of the mvt
         while np.linalg.norm(target_point - self.current_point) > self.ACCURACY and np.linalg.norm(init_point - self.current_point) < meters:
             #adjust speed
-            self._command_motor(self.getLinSpeed(target_point, 1), 0)
+            self._command_motor(self.getLinSpeed2(init_point, target_point, 2), 0)
 
             self.rate.sleep()
 
@@ -130,11 +172,11 @@ class RobotController:
 
 def navigate(rc): 
     
-    rc.move(1.0)
-    rc.turn(np.deg2rad(90))
-    rc.move(1.0)
-    rc.turn(-np.deg2rad(90))
-    rc.move(1.0)      
+    rc.move(.9)
+    rc.turn(-np.deg2rad(93))
+    rc.move(.9)
+    rc.turn(np.deg2rad(93))
+    rc.move(.9)      
 
 def main():
 
@@ -144,6 +186,7 @@ def main():
     rc = RobotController()
     rospy.sleep(1) # delay to avoid loss of message
     navigate(rc)
+    #rc.plotSpeed(1)
 
 if __name__ == '__main__':
     main()
