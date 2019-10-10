@@ -17,16 +17,20 @@ class RobotController:
     MAX_TURN_SPEED=np.deg2rad(45)
     MIN_TURN_SPEED=0.01
 
-    ACCURACY = 0.01 # used for both
+    ACCURACY = 0.02 # used for both distance and angle
     
-    RIGHT = -1
-    LEFT = 1
+    RIGHT = 1
+    LEFT = -1
+
+    RATE = 20
 
     def __init__(self):
         self.pub = rospy.Publisher('cmd_vel',Twist,queue_size = 10)
         self.mc = Twist()
 
         self.tfsub = rospy.Subscriber('tf', TFMessage, self.processTF)
+
+        self.rate = rospy.Rate(20)
 
         self.is_turning = False
         self.is_moving = False
@@ -57,25 +61,25 @@ class RobotController:
         if self.is_moving:
 
             if np.linalg.norm(self.target_point - self.current_point) > self.ACCURACY and \
-            np.linalg.norm(self.init_point - self.current_point) > self.target_distance:
+            np.linalg.norm(self.init_point - self.current_point) < self.target_distance:
                 
                 #adjust speed
                 self._command_motor(self.getLinSpeed(1), 0)
             
             else: # destination reached
-                is_moving = False
+                self.is_moving = False
                 self._stop()
 
 
         if self.is_turning:
 
-            if np.abs(self.current_yaw - self.target_yaw) > self.ACCURACY:
+            if np.abs(self.current_yaw - self.target_yaw) > np.deg2rad(self.ACCURACY):
 
                 # adjust speed
                 self._command_motor(0, self.direction * self.getAngSpeed(2))
 
             else: # destination reached
-                is_turning = False
+                self.is_turning = False
                 self._stop()
 
     '''
@@ -114,13 +118,13 @@ class RobotController:
         else:
             self.direction = self.LEFT
 
-        rospy.loginfo("target : {}".format(target_yaw))
+        rospy.loginfo("target : {}".format(self.target_yaw))
         rospy.loginfo("origin : {}".format(self.current_yaw))
 
         # make the function blocking until the end of the mvt
         self.is_turning = True
         while self.is_turning:
-            None
+            self.rate.sleep()
 
         rospy.loginfo("Finished turning")
 
@@ -145,7 +149,7 @@ class RobotController:
         # making the function blocking until the end of the mvt
         self.is_moving = True
         while self.is_moving:
-            None
+            self.rate.sleep()
 
         rospy.loginfo("Finished moving forward")
         
@@ -164,9 +168,9 @@ class RobotController:
 def navigate(rc): 
     
     rc.move(1.0)
-    rc.turn(np.deg2rad(90))
-    rc.move(1.0)
     rc.turn(-np.deg2rad(90))
+    rc.move(1.0)
+    rc.turn(np.deg2rad(90))
     rc.move(1.0)      
 
 def main():
