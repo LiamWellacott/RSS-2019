@@ -11,7 +11,7 @@ import numpy as np
 
 class RobotController:
 
-    MAX_LIN_SPEED=0.1
+    MAX_LIN_SPEED=0.26
     MIN_LIN_SPEED=0.01
 
     MAX_TURN_SPEED=np.deg2rad(45)
@@ -31,7 +31,7 @@ class RobotController:
         self.current_yaw = 0
 
         # rate used to check if termination condition
-        self.rate = rospy.Rate(MAIN_RATE)
+        self.rate = rospy.Rate(self.MAIN_RATE)
 
     def processTF(self, msg):
         # Get distance from origin point
@@ -49,8 +49,8 @@ class RobotController:
     '''
     adjust speed based on distance to the target yaw, constrained by a max and min speed
     '''
-    def getAngSpeed(self, alpha):
-        return max(min(alpha*(np.abs(self.current_yaw - self.target_yaw)),
+    def getAngSpeed(self, target_yaw, alpha):
+        return max(min(alpha*(np.abs(target_yaw - self.current_yaw)),
                         self.MAX_TURN_SPEED),
                     self.MIN_TURN_SPEED)
 
@@ -73,17 +73,17 @@ class RobotController:
         elif target_yaw < -np.pi: # underflow -pi
             target_yaw += 2*np.pi
         
-        rospy.loginfo("target : {}".format(self.target_yaw))
-        rospy.loginfo("origin : {}".format(self.yaw))
+        rospy.loginfo("target : {}".format(target_yaw))
+        rospy.loginfo("origin : {}".format(self.current_yaw))
 
         # making the function blocking until the end of the mvt
-        while np.abs(self.current_yaw - self.target_yaw) > np.deg2rad(self.ACCURACY):
+        while np.abs(self.current_yaw - target_yaw) > np.deg2rad(self.ACCURACY):
 
             # adjust speed
             if degrees > 0: # if asked to turn right 
-                self._command_motor(0, -self.getAngSpeed(2))
+                self._command_motor(0, -self.getAngSpeed(target_yaw, 2))
             else:
-                self._command_motor(0, self.getAngSpeed(2))
+                self._command_motor(0, self.getAngSpeed(target_yaw, 2))
 
             self.rate.sleep()
 
@@ -100,15 +100,15 @@ class RobotController:
         x = meters*np.cos(self.current_yaw) + self.current_point[0]
         y = meters*np.sin(self.current_yaw) + self.current_point[1]
         target_point = np.array([x, y])
+        init_point = np.copy(self.current_point)
 
         rospy.loginfo("target : {}, {}".format(x, y))
         rospy.loginfo("origin : {}, {}".format(self.current_point[0], self.current_point[1]))
         
         # making the function blocking until the end of the mvt
-        while np.linalg.norm(target_point - self.current_point) > self.ACCURACY:
-
+        while np.linalg.norm(target_point - self.current_point) > self.ACCURACY and np.linalg.norm(init_point - self.current_point) < meters:
             #adjust speed
-            self._command_motor(self.MAX_LIN_SPEED, 0)
+            self._command_motor(self.getLinSpeed(target_point, 1), 0)
 
             self.rate.sleep()
 
