@@ -17,23 +17,27 @@ class RobotController:
         self.mc = Twist()
 
     def turn(self, degrees):
-        
-        self._command_motor(0, self.TURN_SPEED)
+
+        # if negative direction sent, use reverse speed
+        if degrees > 0:        
+            self._command_motor(0, -self.TURN_SPEED)
+        else:
+            self._command_motor(0, self.TURN_SPEED)
 
         # wait for the right amount of time
-        t = degrees / self.TURN_SPEED
-	rospy.loginfo("turning for {}".format(t))
+        t = np.abs(degrees) / self.TURN_SPEED
+        rospy.loginfo("turning for {}".format(t))
         rospy.sleep(t)
 
         self._stop()
 
     def move(self, meters):
-
+        
         self._command_motor(self.LINEAR_SPEED, 0)
 
         # wait for the right amount of time
         t = meters / self.LINEAR_SPEED
-	rospy.loginfo("moving for {}".format(t))
+        rospy.loginfo("moving for {}".format(t))
         rospy.sleep(t)
 
         self._stop()
@@ -52,6 +56,10 @@ class RobotController:
 
 def navigate(rc): 
     
+    # delay to avoid message loss
+    rospy.sleep(2)
+
+    # send commands
     rc.move(1.0)
     rc.turn(np.deg2rad(90))
     rc.move(1.0)
