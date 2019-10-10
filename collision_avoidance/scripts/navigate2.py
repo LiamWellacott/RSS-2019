@@ -29,14 +29,15 @@ class RobotController:
         self.tfsub = rospy.Subscriber('tf', TFMessage, self.processTF)
 
         self.is_turning = False
-        self.direction = 0
         self.is_moving = False
 
         self.init_point = None
+        self.target_distance = 0.0
         self.current_point = None
-        self.current_yaw = 0
-
         self.target_point = None
+
+        self.direction = 0
+        self.current_yaw = 0
         self.target_yaw = 0
 
     def processTF(self, msg):
@@ -44,7 +45,7 @@ class RobotController:
         pose = msg.transforms[0].transform
         self.current_point = np.array([pose.translation.x, pose.translation.y])
 
-        # convert representation of rotation from quaternion to yaw
+        # Convert representation of rotation from quaternion to yaw
         orientation = (
             pose.rotation.x,
             pose.rotation.y,
@@ -53,10 +54,10 @@ class RobotController:
         )
         self.current_yaw = tf.transformations.euler_from_quaternion(orientation)[2]
 
-        if is_moving:
+        if self.is_moving:
 
-            if np.linalg.norm(target_point - self.current_point) > self.ACCURACY and 
-                np.linalg.norm(init_point - self.current_point) < meters:
+            if np.linalg.norm(self.target_point - self.current_point) > self.ACCURACY and \
+            np.linalg.norm(self.init_point - self.current_point) > self.target_distance:
                 
                 #adjust speed
                 self._command_motor(self.getLinSpeed(1), 0)
@@ -66,7 +67,7 @@ class RobotController:
                 self._stop()
 
 
-        if is_turning:
+        if self.is_turning:
 
             if np.abs(self.current_yaw - self.target_yaw) > self.ACCURACY:
 
@@ -129,11 +130,14 @@ class RobotController:
     '''
     def move(self, meters):
 
+        # TODO discard distance
+
         # calculate target based on current position
         x = meters*np.cos(self.current_yaw) + self.current_point[0]
         y = meters*np.sin(self.current_yaw) + self.current_point[1]
         self.target_point = np.array([x, y])
         self.init_point = np.copy(self.current_point)
+        self.target_distance = meters
 
         rospy.loginfo("target : {}, {}".format(x, y))
         rospy.loginfo("origin : {}, {}".format(self.current_point[0], self.current_point[1]))
