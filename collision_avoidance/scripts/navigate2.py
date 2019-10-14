@@ -18,27 +18,41 @@ class RobotController:
     MAX_TURN_SPEED=np.deg2rad(45)
     MIN_TURN_SPEED=0.01
 
-    MAIN_RATE = 20
-
-    ACCURACY = 0.01
+    ACCURACY = 0.02 # used for both distance and angle
     
+    RIGHT = 1
+    LEFT = -1
+
+    RATE = 20
+
     def __init__(self):
         self.pub = rospy.Publisher('cmd_vel',Twist,queue_size = 10)
         self.mc = Twist()
 
         self.tfsub = rospy.Subscriber('tf', TFMessage, self.processTF)
 
-        self.current_point = None
-        self.current_yaw = 0
+        self.rate = rospy.Rate(20)
 
-        # rate used to check if termination condition
-        self.rate = rospy.Rate(self.MAIN_RATE)
+        self.is_turning = False
+        self.is_moving = False
+
+        self.init_point = None
+        self.target_distance = 0.0
+        self.current_point = None
+        self.target_point = None
+
+        self.direction = 0
+        self.current_yaw = 0
+        self.init_yaw = 0
+        self.target_yaw = 0
+        
 
     def processTF(self, msg):
-        # Get distance from origin point
+        # Get the current distance from robots reference origin point
         pose = msg.transforms[0].transform
         self.current_point = np.array([pose.translation.x, pose.translation.y])
 
+        # Convert representation of rotation from quaternion to yaw
         orientation = (
             pose.rotation.x,
             pose.rotation.y,
@@ -47,19 +61,43 @@ class RobotController:
         )
         self.current_yaw = tf.transformations.euler_from_quaternion(orientation)[2]
 
+        if self.is_moving:
+
+            if np.linalg.norm(self.target_point - self.current_point) > self.ACCURACY and \
+            np.linalg.norm(self.init_point - self.current_point) < self.target_distance:
+                
+                #adjust speed
+                self._command_motor(self.getLinSpeed2(2.0), 0)
+            
+            else: # destination reached
+                self.is_moving = False
+                self._stop()
+
+
+        if self.is_turning:
+
+            if np.abs(self.current_yaw - self.target_yaw) > np.deg2rad(self.ACCURACY):
+
+                # adjust speed
+                self._command_motor(0, self.direction * self.getAngSpeed2(2.0))
+
+            else: # destination reached
+                self.is_turning = False
+                self._stop()
+
     '''
     adjust speed based on distance to the target yaw, constrained by a max and min speed
     '''
-    def getAngSpeed(self, target_yaw, alpha):
-        return max(min(alpha*(np.abs(target_yaw - self.current_yaw)),
+    def getAngSpeed(self, alpha):
+        return max(min(alpha*(np.abs(self.target_yaw - self.current_yaw)),
                         self.MAX_TURN_SPEED),
                     self.MIN_TURN_SPEED)
 
-    def getAngSpeed2(self, init_yaw, target_yaw, alpha):
-        speed_goal = max(min(alpha*(np.abs(target_yaw - self.current_yaw)),
+    def getAngSpeed2(self, alpha):
+        speed_goal = max(min(alpha*(np.abs(self.target_yaw - self.current_yaw)),
                              self.MAX_TURN_SPEED),
                          self.MIN_TURN_SPEED)
-        speed_start = max(min(alpha*(np.abs(init_yaw - self.current_yaw)),
+        speed_start = max(min(alpha*(np.abs(self.init_yaw - self.current_yaw)),
                              self.MAX_TURN_SPEED),
                          self.MIN_TURN_SPEED)
         return min(speed_goal, speed_start)
@@ -67,14 +105,14 @@ class RobotController:
     '''
     adjust speed based on distance to the target location, constrained by a max and min speed
     '''
-    def getLinSpeed(self, init_point, target_point, alpha):
-        dist = np.linalg.norm(target_point - self.current_point) 
+    def getLinSpeed(self, alpha):
+        dist = np.linalg.norm(self.target_point - self.current_point) 
         return max(min(alpha*dist, self.MAX_LIN_SPEED),
                    self.MIN_LIN_SPEED)
     
-    def getLinSpeed2(self, init_point, target_point, alpha):
-        dist_goal = np.linalg.norm(target_point - self.current_point)
-        dist_start = np.linalg.norm(init_point - self.current_point)
+    def getLinSpeed2(self, alpha):
+        dist_goal = np.linalg.norm(self.target_point - self.current_point)
+        dist_start = np.linalg.norm(self.init_point - self.current_point)
         
         speed_start = max(min(alpha*dist_start, self.MAX_LIN_SPEED),
                    self.MIN_LIN_SPEED)
@@ -103,60 +141,61 @@ class RobotController:
         plt.plot(to_start, speed)
         plt.show()
         
+    '''
+    sets the target yaw for the robot relative to current yaw by 'degrees' 
+    '''
     def turn(self, degrees):
 
         # TODO reject which are not in range -pi to pi
 
         # calculate absolute target yaw in range -pi to pi
-        target_yaw = self.current_yaw + degrees
-        init_yaw = self.current_yaw
-        if target_yaw > np.pi: # overflow pixs
-            target_yaw -= 2*np.pi
-        elif target_yaw < -np.pi: # underflow -pi
-            target_yaw += 2*np.pi
-        
-        rospy.loginfo("target : {}".format(target_yaw))
+        self.init_yaw = self.current_yaw
+        self.target_yaw = self.current_yaw + degrees
+        if self.target_yaw > np.pi: # overflow pi
+            self.target_yaw -= 2*np.pi
+        elif self.target_yaw < -np.pi: # underflow -pi
+            self.target_yaw += 2*np.pi
+
+        # set direction of movement
+        if degrees > 0:
+            self.direction = self.RIGHT
+        else:
+            self.direction = self.LEFT
+
+        rospy.loginfo("target : {}".format(self.target_yaw))
         rospy.loginfo("origin : {}".format(self.current_yaw))
 
-        # making the function blocking until the end of the mvt
-        while np.abs(self.current_yaw - target_yaw) > np.deg2rad(self.ACCURACY):
-
-            # adjust speed
-            if degrees > 0: # if asked to turn right 
-                self._command_motor(0, self.getAngSpeed2(init_yaw, target_yaw, 2))
-            else:
-                self._command_motor(0, -self.getAngSpeed2(init_yaw, target_yaw, 2))
-
+        # make the function blocking until the end of the mvt
+        self.is_turning = True
+        while self.is_turning:
             self.rate.sleep()
 
         rospy.loginfo("Finished turning")
 
-        self._stop()
-            
+                
     '''
-    moves the robot 'meters' in the current orientation
+    sets the target point for the robot 'meters' forward in the current orientation
     '''
     def move(self, meters):
+
+        # TODO discard distance
 
         # calculate target based on current position
         x = meters*np.cos(self.current_yaw) + self.current_point[0]
         y = meters*np.sin(self.current_yaw) + self.current_point[1]
-        target_point = np.array([x, y])
-        init_point = np.copy(self.current_point)
+        self.target_point = np.array([x, y])
+        self.init_point = np.copy(self.current_point)
+        self.target_distance = meters
 
         rospy.loginfo("target : {}, {}".format(x, y))
         rospy.loginfo("origin : {}, {}".format(self.current_point[0], self.current_point[1]))
         
         # making the function blocking until the end of the mvt
-        while np.linalg.norm(target_point - self.current_point) > self.ACCURACY and np.linalg.norm(init_point - self.current_point) < meters:
-            #adjust speed
-            self._command_motor(self.getLinSpeed2(init_point, target_point, 2), 0)
-
+        self.is_moving = True
+        while self.is_moving:
             self.rate.sleep()
 
         rospy.loginfo("Finished moving forward")
-
-        self._stop()
         
         
     def _stop(self):
@@ -171,12 +210,12 @@ class RobotController:
         self.pub.publish(self.mc)
 
 def navigate(rc): 
-    
-    rc.move(.9)
-    rc.turn(-np.deg2rad(93))
-    rc.move(.9)
-    rc.turn(np.deg2rad(93))
-    rc.move(.9)      
+
+    rc.move(1.0)
+    rc.turn(-np.deg2rad(90))
+    rc.move(1.0)
+    rc.turn(np.deg2rad(90))
+    rc.move(1.0)      
 
 def main():
 
