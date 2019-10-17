@@ -28,7 +28,7 @@ class Segment(object):
             self.vert = True
     '''
     Computes the intersection point of the segment with a line.
-    The line is a array [m, b] where m is the slope and b is the 
+    The line is a array [m, b] where m is the slope and b is the
     intersect.
     args:
     -----
@@ -41,7 +41,7 @@ class Segment(object):
         # not a vertical line
         if self.vert and seg.vert:
             return np.full(2, np.nan)
-        
+
         if not self.vert and not seg.vert:
             m1 = (self.p1[1] - self.p2[1]) / (self.p1[0] - self.p2[0])
             b1 = self.p1[1] - m1*self.p1[0]
@@ -55,19 +55,19 @@ class Segment(object):
             x = (b2 - b1) / (m1 - m2)
             y = m1*x + b1
             #print("x={:.2f}, y={:.2f} intersection of y={:.2f}*x + {:.2f} and y = {:.2f}*x + {:.2f}".format(x, y, m1, b1, m2, b2))
-        
+
         if self.vert:
             m2 = (seg.p1[1] - seg.p2[1]) / (seg.p1[0] - seg.p2[0])
             b2 = seg.p1[1] - m2 * seg.p1[0]
             y = m2 * self.p1[0] + b2
             x = self.p1[0]
-                        
+
         if seg.vert:
             m1 = (self.p1[1] - self.p2[1]) / (self.p1[0] - self.p2[0])
             b1 = self.p1[1] - m1 * self.p1[0]
             y = m1 * seg.p1[0] + b1
             x = seg.p1[0]
-            
+
 
         x1a = self.p1[0]
         x1b = self.p2[0]
@@ -86,7 +86,7 @@ class Segment(object):
         if x1b < x or x < x1a or x2b < x or x < x2a or \
            y1b < y or y < y1a or y2b < y or y < y2a:
             return np.full(2, np.nan)
-        
+
         return np.array([x, y])
 
     def __str__(self):
@@ -103,7 +103,7 @@ class Segment(object):
         ax.autoscale()
         ax.margins(0.1)
         return fig, ax
-    
+
 class Map(object):
     def __init__(self, map_file):
         self.segments = []
@@ -140,11 +140,9 @@ class Map(object):
             p = seg.intersect(segment)
             if not np.isnan(p).any():
                 points.append(p)
-        return points
-                
-            
+        return np.array(points)
 
-        
+
 class Robot:
     def __init__(self):
         global WORLD_MAP
@@ -180,7 +178,9 @@ class Robot:
             y = np.sin(angle)*self.ray_length + self.y
             seg = Segment([self.x, self.y], [x, y])
             pts = self.world_map.intersect(seg)
-            for pt in pts:
+            if not pts.size == 0:
+                dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
+                pt = pts[np.argmin(dist)]
                 points.append(pt)
             lines.append([(self.x, self.y), (x, y)])
         return lines, points
@@ -197,7 +197,7 @@ class Robot:
         for point in points:
             ax.plot(point[0], point[1], 'ro')
         return fig, ax
-    
+
     def measureProb(self):
         return
 
@@ -205,15 +205,15 @@ class Robot:
         return
 
 WORLD_MAP = Map("maps/data.json")
-    
+
 if __name__ == "__main__":
     global WORLD_MAP
     r = Robot()
-    r.setPose(.5, .5, 0)
+    r.setPose(2.5, 2, 0)
     fig, ax = plt.subplots()
     fig, ax = WORLD_MAP.plotMap(fig, ax)
-    seg = Segment([0.5, 0.5], [4.26180808, -3.26180808])
-    WORLD_MAP.intersect(seg)
+    #seg = Segment([0.5, 0.5], [4.26180808, -3.26180808])
+    #WORLD_MAP.intersect(seg)
     #fig, ax = seg.plotSeg(fig, ax)
     fig, ax = r.plotRay(fig, ax)
     plt.show()
