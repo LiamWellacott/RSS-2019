@@ -5,7 +5,10 @@ import numpy as np
 import json
 import matplotlib.pyplot as plt
 from matplotlib import collections as mc
+from copy import copy as copy
 
+def gaussian(mu, sigma, x):
+    return np.exp(- ((mu - x) ** 2) / (sigma ** 2) / 2.0) / np.sqrt(2.0 * np.pi * (sigma ** 2))
 
 class Segment(object):
     '''
@@ -54,7 +57,7 @@ class Segment(object):
                 return np.full(2, np.nan)
             x = (b2 - b1) / (m1 - m2)
             y = m1*x + b1
-            #print("x={:.2f}, y={:.2f} intersection of y={:.2f}*x + {:.2f} and y = {:.2f}*x + {:.2f}".format(x, y, m1, b1, m2, b2))
+
 
         if self.vert:
             m2 = (seg.p1[1] - seg.p2[1]) / (seg.p1[0] - seg.p2[0])
@@ -81,8 +84,7 @@ class Segment(object):
         y2a = min(seg.p1[1], seg.p2[1])
         y2b = max(seg.p1[1], seg.p2[1])
 
-        #print("seg1= {} \nseg2 = {}".format(self, seg))
-        #input()
+
         if x1b < x or x < x1a or x2b < x or x < x2a or \
            y1b < y or y < y1a or y2b < y or y < y2a:
             return np.full(2, np.nan)
@@ -157,6 +159,9 @@ class Robot:
         self.world_map = WORLD_MAP
         return
 
+    def __str__(self):
+        return "x {}, y {}, yaw {}\n".format(self.x, self.y, self.yaw)
+
     def setPose(self, x, y, yaw):
         self.x = x
         self.y = y
@@ -173,6 +178,7 @@ class Robot:
     def sense(self):
         lines = []
         points = []
+        distances = []
         for angle in np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_ray, self.nb_ray):
             x = np.cos(angle)*self.ray_length + self.x
             y = np.sin(angle)*self.ray_length + self.y
@@ -181,12 +187,14 @@ class Robot:
             if not pts.size == 0:
                 dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
                 pt = pts[np.argmin(dist)]
+                dist = np.amin(dist)
+                distances.append(dist + np.random.rand()*self.sense_noise)
                 points.append(pt)
             lines.append([(self.x, self.y), (x, y)])
-        return lines, points
+        return lines, points, distances
 
     def plotRay(self, fig, ax):
-        lines, points = self.sense()
+        lines, points, _ = self.sense()
         value = np.empty((), dtype=object)
         c = [(1,0,0,1), (0,1,0,1), (0,0,1,1), (1,1,0,1), (1,0,1,1), (0,1,1,1), (0,0,0,1), (0,0,0,1)]
         lc = mc.LineCollection(lines, colors=c, linestyles='dashed', linewidth=2)
@@ -198,22 +206,151 @@ class Robot:
             ax.plot(point[0], point[1], 'ro')
         return fig, ax
 
-    def measureProb(self):
-        return
+    def plotRobot(self, fig, ax):
+        ax.scatter(self.x, self.y, c='r', s=500)
+        ax.quiver(self.x, self.y, 5,5, angles=np.rad2deg(self.yaw), scale=1/5, scale_units="dots", units="dots", color="k", pivot="mid",width=2.5, headwidth=5, headlength=2.5)
+        return fig, ax
 
-    def move(self):
-        return
+    def measureProb(self, m):
+        distances = []
+        prob = 1.0
+        for i, angle in enumerate(np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_ray, self.nb_ray)):
+            x = np.cos(angle)*self.ray_length + self.x
+            y = np.sin(angle)*self.ray_length + self.y
+            seg = Segment([self.x, self.y], [x, y])
+            pts = self.world_map.intersect(seg)
+            if not pts.size == 0:
+                dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
+                dist = np.amin(dist)
+                prob *= gaussian(dist, self.sense_noise, m[i])
+            else:
+                prob *= 0
+        return prob
+
+    def move(self, turn, forward):
+        if forward < 0:
+            raise ValueError('Robot cant move backwards')
+        
+        # turn, and add Gaussian noise to the turning command
+        orientation = self.yaw + float(turn) + np.random.randn()*self.turn_noise
+        orientation %= 2 * np.pi # make sure: 0=< orientation <=2*pi
+    
+        # move, and add Gaussian noise to the motion command
+        dist = float(forward) + np.random.randn()*self.move_noise
+        x = self.x + (np.cos(orientation) * dist)
+        y = self.y + (np.sin(orientation) * dist)
+        x %= 4.25    # make sure: 0=< position <= world_size
+        y %= 3.20
+        
+        # set the new location x, y back to the member variables x y of the class
+        self.setPose(x, y, orientation)
+        return None
 
 WORLD_MAP = Map("maps/data.json")
 
-if __name__ == "__main__":
-    global WORLD_MAP
+def plotParticles(particles, fig, ax):
+    # Plotting the particles
+    for p in particles:
+        plt.scatter(p.x, p.y, c='b')
+        plt.quiver(p.x, p.y, 1,1, angles=np.rad2deg(p.yaw), scale=1/5, scale_units="dots",
+                   units="dots", color="y", pivot="mid", width=1.25, headwidth=2, headlength=0.5)
+    return fig, ax
+
+class ParticuleFilter(object):
+    def __init__(self, nb_p):
+        self.p = []
+        self.w = []
+
+        for _ in range(nb_p):
+            r = Robot()
+            # TODO estimate the std for the different operations
+            r.setNoise(0.1, 0.1, 0.5)
+            self.p.append(r)
+
+    def actionUpdate(self, action):
+        for p in self.p:
+            p.move(action[0], action[1])
+
+    def measurementUpdate(self, mt):
+        w = []
+        for p in self.p:
+            w.append(p.measureProb(mt))
+
+        self.w = w/np.sum(w)
+
+    def particleUpdate(self):
+        self.p = resampling(self.p, self.w)
+
+def resampling(p, w):
+    N = len(p)
+    beta=0
+    j=0
+    w_max= max(w)
+    p_temp=[]
+    for i in range(N):
+        beta= beta+2.0*w_max*np.random.rand()
+        while beta>w[j]:
+            beta = beta - w[j]
+            j=(j + 1) % N
+        selectedParticle = copy(p[j])
+        p_temp.append(selectedParticle) # if beta<w[index], this indexed particle is selected
+    return p_temp
+
+
+def evaluation(robot, particles):
+    # Gives the mean error in position between the robot's
+    # actual position and the set of particles
+    sum = 0.0;
+    for p in particles: # calculate mean error
+        dx = (p.x - robot.x)
+        dy = (p.y - robot.y)
+        err = np.sqrt(dx**2 + dy**2)
+        sum += err
+    return sum / float(len(particles))
+
+def main():
     r = Robot()
-    r.setPose(2.5, 2, 0)
-    fig, ax = plt.subplots()
-    fig, ax = WORLD_MAP.plotMap(fig, ax)
-    #seg = Segment([0.5, 0.5], [4.26180808, -3.26180808])
-    #WORLD_MAP.intersect(seg)
-    #fig, ax = seg.plotSeg(fig, ax)
-    fig, ax = r.plotRay(fig, ax)
-    plt.show()
+    r.setPose(.5, .5, 0)
+    r.setNoise(0.0, 0.0, 0.0)
+
+    steps = 100
+    heading = 10.0/180.0*np.pi
+    steplength = .1
+    
+    # Initialize the state estimator
+    estimator = ParticuleFilter(50)
+    # plot robot, environment and particles
+    #fig, ax = plt.subplots()
+    #fig, ax = plotParticles(estimator.p, fig, ax)
+    #fig, ax = r.plotRobot(fig, ax)
+    #fig, ax = r.world_map.plotMap(fig, ax)
+    #plt.show()
+    
+    # for each step update the belief
+    for s in range(steps):
+
+        # Implement the particle filter algorithm
+        # move robot
+        r.move(heading, steplength)
+
+        # update pose of each particle according to the motion model
+        estimator.actionUpdate([heading, steplength])
+        
+        # obtain a sensor reading
+        _, _, measure = r.sense()
+        # update the weights of the particles according to the measrement model
+        estimator.measurementUpdate(measure)
+
+        # update the particles according to resampling process
+        estimator.particleUpdate()
+
+        #fig, ax = plt.subplots()
+        #fig, ax = plotParticles(estimator.p, fig, ax)
+        #fig, ax = r.plotRobot(fig, ax)
+        #fig, ax = r.world_map.plotMap(fig, ax)
+        #plt.show()
+        print('Step: ',  s)
+        print('Robot location:', r)
+        print("Mean error:",evaluation(r, estimator.p))
+if __name__ == "__main__":
+    main()
