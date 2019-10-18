@@ -12,3 +12,12 @@ Right now only a run
       $ roslaunch rss_gazebo test.launch
       '''
       
+
+## TODO
+
+# Paritlce filter
+
+ - [ ] profile the particle filter.
+ - [ ] it looks like the intersection dosen't work then the robot has negative coordinates: FIX THIS!!
+ - [ ] determine where we should place the map orign.
+ - [ ] find a simpler and more elegant way to compute intersections between segments.
