@@ -6,12 +6,12 @@ from geometry_msgs.msg import Twist
 from numpy import concatenate
 import numpy as np
 
-SPEED=0.5
+SPEED=0.26
 ANGULAR_SPEED=0.5
 OBS_ANGLE=45
 SIDE_ANGLES=5
-DETECT_RANGE=0.35
-SELF_BODY=0.12
+DETECT_RANGE=0.5
+SELF_BODY=0.220
 
 lin = SPEED #todo put in constants
 turn = ANGULAR_SPEED
@@ -46,8 +46,8 @@ def scanCallback(msg):
     front_laser_left = msg.ranges[:OBS_ANGLE]
     front_laser_right = msg.ranges[-OBS_ANGLE:]
     front_laser=np.concatenate((front_laser_left,front_laser_right),axis=None)
-    left_laser = np.mean(msg.ranges[89-SIDE_ANGLE:89+SIDE_ANGLE])
-    right_laser = np.mean(msg.ranges[269-SIDE_ANGLE:269+SIDE_ANGLE])
+    left_laser = np.mean(msg.ranges[89-SIDE_ANGLES:89+SIDE_ANGLES])
+    right_laser = np.mean(msg.ranges[269-SIDE_ANGLES:269+SIDE_ANGLES])
 
     # if we detect an object and not turning
     if not turning:
