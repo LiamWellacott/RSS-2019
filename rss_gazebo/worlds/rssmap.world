@@ -13,6 +13,7 @@
       </attenuation>
       <direction>-0.5 0.5 -1</direction>
     </light>
+    
     <model name='ground_plane'>
       <static>1</static>
       <link name='link'>
@@ -60,6 +61,7 @@
         <gravity>1</gravity>
       </link>
     </model>
+    
     <gravity>0 0 -9.8</gravity>
     <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type='adiabatic'/>
@@ -75,6 +77,7 @@
       <background>0.7 0.7 0.7 1</background>
       <shadows>1</shadows>
     </scene>
+    
     <spherical_coordinates>
       <surface_model>EARTH_WGS84</surface_model>
       <latitude_deg>0</latitude_deg>
@@ -82,6 +85,7 @@
       <elevation>0</elevation>
       <heading_deg>0</heading_deg>
     </spherical_coordinates>
+
     <model name='rssmap'>
       <pose frame=''>2.125 1.6 0 0 -0 0</pose>
       <link name='Wall_37'>
@@ -126,6 +130,7 @@
         <kinematic>0</kinematic>
         <gravity>1</gravity>
       </link>
+      
       <link name='Wall_39'>
         <collision name='Wall_39_Collision'>
           <geometry>
