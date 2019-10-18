@@ -246,7 +246,7 @@ class Robot:
         self.setPose(x, y, orientation)
         return None
 
-WORLD_MAP = Map("maps/data.json")
+WORLD_MAP = Map("maps/rss.json")
 
 def plotParticles(particles, fig, ax):
     # Plotting the particles
@@ -352,5 +352,9 @@ def main():
         print('Step: ',  s)
         print('Robot location:', r)
         print("Mean error:",evaluation(r, estimator.p))
+        
 if __name__ == "__main__":
+    #fig, ax = plt.subplots()
+    #fig, ax = WORLD_MAP.plotMap(fig, ax)
+    #plt.show()
     main()
