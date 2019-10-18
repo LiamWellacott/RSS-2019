@@ -148,8 +148,8 @@ class Map(object):
 class Robot:
     def __init__(self):
         global WORLD_MAP
-        self.x = np.random.rand() * 4.25
-        self.y = np.random.rand() * 3.20
+        self.x = np.random.uniform(-1, 1) * 2.0
+        self.y = np.random.uniform(-1, 1) * 1.5
         self.yaw = np.random.uniform(-1, 1) * np.pi
         self.move_noise = 0
         self.turn_noise = 0
@@ -310,7 +310,7 @@ def evaluation(robot, particles):
 
 def main():
     r = Robot()
-    r.setPose(.5, .5, 0)
+    r.setPose(-.5, .5, 0)
     r.setNoise(0.0, 0.0, 0.0)
 
     steps = 100
@@ -320,11 +320,11 @@ def main():
     # Initialize the state estimator
     estimator = ParticuleFilter(50)
     # plot robot, environment and particles
-    #fig, ax = plt.subplots()
-    #fig, ax = plotParticles(estimator.p, fig, ax)
-    #fig, ax = r.plotRobot(fig, ax)
-    #fig, ax = r.world_map.plotMap(fig, ax)
-    #plt.show()
+    fig, ax = plt.subplots()
+    fig, ax = plotParticles(estimator.p, fig, ax)
+    fig, ax = r.plotRobot(fig, ax)
+    fig, ax = r.world_map.plotMap(fig, ax)
+    plt.show()
     
     # for each step update the belief
     for s in range(steps):
@@ -344,11 +344,11 @@ def main():
         # update the particles according to resampling process
         estimator.particleUpdate()
 
-        #fig, ax = plt.subplots()
-        #fig, ax = plotParticles(estimator.p, fig, ax)
-        #fig, ax = r.plotRobot(fig, ax)
-        #fig, ax = r.world_map.plotMap(fig, ax)
-        #plt.show()
+        fig, ax = plt.subplots()
+        fig, ax = plotParticles(estimator.p, fig, ax)
+        fig, ax = r.plotRobot(fig, ax)
+        fig, ax = r.world_map.plotMap(fig, ax)
+        plt.show()
         print('Step: ',  s)
         print('Robot location:', r)
         print("Mean error:",evaluation(r, estimator.p))
