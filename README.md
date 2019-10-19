@@ -21,3 +21,4 @@ Right now only a run
  - [x] it looks like the intersection dosen't work then the robot has negative coordinates: FIX THIS!!
  - [ ] determine where we should place the map orign.
  - [ ] find a simpler and more elegant way to compute intersections between segments.
+ - [ ] implement various resampling algorithms and evaluate their performances.
