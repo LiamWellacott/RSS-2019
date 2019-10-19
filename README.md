@@ -22,3 +22,5 @@ Right now only a run
  - [ ] determine where we should place the map orign.
  - [ ] find a simpler and more elegant way to compute intersections between segments.
  - [ ] implement various resampling algorithms and evaluate their performances.
+ - [ ] comment the files:
+      * [x] particle.py 
