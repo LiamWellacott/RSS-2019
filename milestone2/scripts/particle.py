@@ -167,14 +167,21 @@ class Segment2(object):
                 - None
         """
         #orientation always from p1 to p2
-        if p1[0] < p2[0]:
-            self.p1 = p1
-            self.p2 = p2
-            self.vec = p2 - p1
-        else:
-            self.p1 = p2
-            self.p2 = p1
-            self.vec = p1 - p2
+        #if p1[0] < p2[0]:
+        #    self.p1 = p1
+        #    self.p2 = p2
+        #    self.vec = p2 - p1
+        #else:
+        #    self.p1 = p2
+        #    self.p2 = p1
+        #    self.vec = p1 - p2
+        self.p1 = p1
+        self.p2 = p2
+        self.vec = p2 - p1
+        self.perp = np.copy(self.vec)
+        tmp = self.perp[0]
+        self.perp[0] = -self.perp[1]
+        self.perp[1] = tmp
         return
 
     def intersect(self, seg):
@@ -189,6 +196,9 @@ class Segment2(object):
                 - intersection point if one is found, or a 2D array of nan if
                 none is found.
         """
+        if np.dot(self.perp, seg.vec) >= 0:
+            return np.full(2, np.nan)
+
         t = cross((seg.p1 - self.p1), seg.vec)/cross(self.vec, seg.vec)
         s = cross((self.p1 - seg.p1), self.vec)/cross(seg.vec, self.vec)
         # intersection
@@ -207,6 +217,18 @@ class Segment2(object):
         c = [(1,0,0,1)]
         lc = mc.LineCollection(lines, linestyles='dashed', colors=c, linewidth=2)
         ax.add_collection(lc)
+        ax.autoscale()
+        ax.margins(0.1)
+        return fig, ax
+
+    def plotPerp(self, fig, ax):
+        point = (self.p1 + self.p2) / 2
+        norm = self.perp/np.linalg.norm(self.perp)
+        #lines = [[point, point+(self.perp/np.sum(self.perp))]]
+        #c = [(0,1,0,1)]
+        #lc = mc.LineCollection(lines, linestyles='dotted', colors=c, linewidth=2)
+        #ax.add_collection(lc)
+        ax.quiver(point[0], point[1], norm[0]/100., norm[1]/100., color=['g'], scale=0.2)
         ax.autoscale()
         ax.margins(0.1)
         return fig, ax
@@ -232,7 +254,7 @@ class Map(object):
             for seg in data['segments']:
                 p1 = np.array(seg[0])
                 p2 = np.array(seg[1])
-                s = Segment(p1, p2)
+                s = Segment2(p1, p2)
                 self.segments.append(s)
 
     def __str__(self):
@@ -246,6 +268,7 @@ class Map(object):
         lines = []
         for seg in self.segments:
             lines.append(seg._toArray())
+            fig, ax = seg.plotPerp(fig, ax)
         lc = mc.LineCollection(lines, linewidth=2)
         ax.add_collection(lc)
         ax.autoscale()
@@ -275,7 +298,7 @@ class Map(object):
                 points.append(p)
         return np.array(points)
 
-WORLD_MAP = Map("maps/rss.json")
+WORLD_MAP = Map("maps/rss_offset.json")
 
 class Robot:
     """
@@ -357,7 +380,7 @@ class Robot:
         for angle in np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_ray, self.nb_ray):
             x = np.cos(angle)*self.ray_length + self.x
             y = np.sin(angle)*self.ray_length + self.y
-            seg = Segment(np.array([self.x, self.y]), np.array([x, y]))
+            seg = Segment2(np.array([self.x, self.y]), np.array([x, y]))
             pts = self.world_map.intersect(seg)
             if not pts.size == 0:
                 dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
@@ -403,7 +426,7 @@ class Robot:
         for i, angle in enumerate(np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_ray, self.nb_ray)):
             x = np.cos(angle)*self.ray_length + self.x
             y = np.sin(angle)*self.ray_length + self.y
-            seg = Segment(np.array([self.x, self.y]), np.array([x, y]))
+            seg = Segment2(np.array([self.x, self.y]), np.array([x, y]))
             pts = self.world_map.intersect(seg)
             if not pts.size == 0:
                 dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
@@ -456,7 +479,7 @@ class ParticleFilter(object):
         self.w = []
 
         for _ in range(nb_p):
-            r = Robot()
+            r = Robot(WORLD_MAP)
             # TODO estimate the std for the different operations
             r.setNoise(0.1, 0.1, 0.5)
             self.p.append(r)
@@ -524,7 +547,7 @@ def gaussian(mu, sigma, x):
     """
     return np.exp(- ((mu - x) ** 2) / (sigma ** 2) / 2.0) / np.sqrt(2.0 * np.pi * (sigma ** 2))
 
-def cross(v1, v2):
+def cross(v, w):
     """
     Cross product for 2D vector. This function asssumes that the given vector is in 2D.
     input:
@@ -580,7 +603,7 @@ def plotPts(pts, fig, ax):
     return fig, ax
 
 def main():
-    r = Robot()
+    r = Robot(WORLD_MAP)
     r.setPose(-.5, .5, 0)
     r.setNoise(0.0, 0.0, 0.0)
 
@@ -589,7 +612,7 @@ def main():
     steplength = .1
 
     # Initialize the state estimator
-    estimator = ParticuleFilter(50)
+    estimator = ParticleFilter(50)
     # plot robot, environment and particles
     #fig, ax = plt.subplots()
     #fig, ax = plotParticles(estimator.p, fig, ax)
@@ -632,8 +655,8 @@ def main():
 if __name__ == "__main__":
     fig, ax = plt.subplots()
     fig, ax = WORLD_MAP.plotMap(fig, ax)
-    #seg = Segment(np.array([-5, -5]), np.array([-.5, -.5]))
-    r = Robot()
+    #seg = Segment(np.array([0, 0]), np.array([5, 5]))
+    r = Robot(WORLD_MAP)
     r.setPose(.5, .5, .5)
     fig, ax = r.plotRay(fig, ax)
     #pts = WORLD_MAP.intersect(seg)
