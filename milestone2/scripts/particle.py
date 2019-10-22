@@ -86,6 +86,9 @@ class Segment(object):
         return fig, ax
 
 class Map(object):
+
+    LENGTH = 5.32 # sqrt(4.25**2 + 3.20**2)
+
     """
     Class representing the map. It has a set of segments.
     """
@@ -153,9 +156,88 @@ class Map(object):
                 points.append(p)
         return np.array(points)
 
+    def _createLaser(self, particle, angle):
+        '''
+            input:
+            ------
+                - particle : The Robot which is the object of the ray trace, used for position
+                - angle : what angle relative to the current yaw to cast the ray through the robot
+            output:
+            -------
+                - a segment which passes through the world map with the robot at the halfway point
+                This allows us to calculate 2 data points with a single ray trace 
+        '''
+        end_x = np.cos(angle)*WORLD_MAP.LENGTH + particle.x
+        end_y = np.sin(angle)*WORLD_MAP.LENGTH + particle.y
+
+        start_x = -np.cos(angle)*WORLD_MAP.LENGTH + particle.x
+        start_y = -np.sin(angle)*WORLD_MAP.LENGTH + particle.y
+
+        return Segment(np.array([start_x, start_y]), np.array([end_x, end_y]))
+
+    def minIntersections(self, particle, angle):
+        '''
+            input:
+            ------
+                - particle : The Robot which is the focus of the ray trace, used for position
+                - angle : what angle relative to the current yaw to cast the ray through the robot
+            output:
+            -------
+                - a 2rry of the pairs (point, distance), which represents the two minimum points of intersection in front of the robot and behind.
+                If no valid intersection is found these points will be "None".
+                        
+        Computes the intersection point between two segments according to
+        [https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect]
+        '''
+        # TODO REVIEW used variables to store the distance when point is sufficient
+        # this was to reduce the number of distance calculations, but makes the code not as clean.
+        # Possibly change the WORLD_MAP.LENGTH to a World.LENGTH and make the robot use this also.
+        # not sure on the type used for return
+
+        # Create a line segment to represent the laser beam
+        ray = self._createLaser(particle, angle)
+
+        # initialise minimum intersection vars
+        min_forward_point = min_backward_point = None
+        min_forward_dist = min_backward_dist = WORLD_MAP.LENGTH
+
+        # check collisions of ray with each of the worlds walls
+        for wall in self.segments:
+
+            prod = cross(wall.vec, ray.vec)
+            if prod == 0: # filter rare case of parallel
+                continue
+
+            # find scalar offsets which indicate crossover point
+            t = cross((ray.p1 - wall.p1), ray.vec)/prod
+            s = cross((wall.p1 - ray.p1), wall.vec)/-prod # because cross(wall.vec, ray.vec) = -cross(ray.vec, wall.vec)
+            
+            # is the crossover point not within the segment? (segment limits at t or s value 0 and 1)
+            if 0.0 > t or t > 1.0 or 0.0 > s or s > 1.0:
+                continue
+            
+            # There is an intersection, get the point by applying the offset
+            point = wall.p1 + t*wall.vec
+
+            # measure distance to the point of intersection from the robot
+            dist = np.linalg.norm(point - np.array([particle.x, particle.y]))
+
+            # if scalar is more than halfway (0.5) the obstacale is in front of robot, otherwise behind.
+            # check if the newly found intersection is closer than previously measured points (for a given direction)
+            if s >= 0.5 and dist < min_forward_dist:
+                min_forward_point = point
+                min_forward_dist = dist
+            elif s < 0.5 and dist < min_backward_dist:
+                min_backward_point = point
+                min_backward_dist = dist
+
+        # return the min intersections in both directions (default is at length of the ray)
+        return [(min_forward_point, min_forward_dist), (min_backward_point, min_backward_dist)]
+        
 WORLD_MAP = Map("maps/rss_offset.json")
 
 class Robot:
+
     """
     Robot class used to represent particles and simulate the robot to
     test the particles.
@@ -173,8 +255,7 @@ class Robot:
         self.move_noise = 0
         self.turn_noise = 0
         self.sense_noise = 0
-        self.nb_ray = 8
-        self.ray_length = 5.32 # sqrt(4.25**2 + 3.20**2)
+        self.nb_ray = 8 # should be (number_of_points_measured / 2) and: # accounted for by the measure func
         self.world_map = map
         return
 
@@ -233,8 +314,8 @@ class Robot:
         points = []
         distances = []
         for angle in np.linspace(self.yaw, self.yaw + 2*np.pi - (2*np.pi/self.nb_ray), self.nb_ray):
-            x = np.cos(angle)*self.ray_length + self.x
-            y = np.sin(angle)*self.ray_length + self.y
+            x = np.cos(angle)*WORLD_MAP.LENGTH + self.x
+            y = np.sin(angle)*WORLD_MAP.LENGTH + self.y
             seg = Segment(np.array([self.x, self.y]), np.array([x, y]))
             pts = self.world_map.intersect(seg)
             if not pts.size == 0:
@@ -281,24 +362,18 @@ class Robot:
         -------
             p(m|x)
         """
-        # TODO is it possible to halve the work if we centre the segment on the robot position and look both ways?
         prob = 1.0
-        for i, angle in enumerate(np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_ray, self.nb_ray)):
+        for i, angle in enumerate(np.linspace(self.yaw, self.yaw + np.pi - (2*np.pi/self.nb_ray), self.nb_ray/2)):
             
-            # Create a line segment to represent the laser beam
-            x = np.cos(angle)*self.ray_length + self.x
-            y = np.sin(angle)*self.ray_length + self.y
-            seg = Segment(np.array([self.x, self.y]), np.array([x, y]))
-
-            # Get the list of intersections and save the distance to the closest point
-            pts = self.world_map.intersect(seg)
-            if not pts.size == 0:
-                dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
-                dist = np.amin(dist)
-                prob *= gaussian(dist, self.sense_noise, m[i])
-            else:
-                # no intersection found probability is 0
-                prob *= 0
+            # Get the minimum intersections in front and behind the robot at this angle
+            for point, distance in self.world_map.minIntersections(self, angle):
+                if point is None :
+                    # no intersection found indicating the robot is outside the arena
+                    # probability is 0 for whole robot
+                    return 0
+                else:
+                    # calculate probability of measurement 
+                    prob *= gaussian(distance, self.sense_noise, m[i])
         return prob
 
     def move(self, turn, forward):
