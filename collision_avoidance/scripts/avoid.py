@@ -9,9 +9,8 @@ import numpy as np
 SPEED=0.26
 ANGULAR_SPEED=0.5
 OBS_ANGLE=45
-SIDE_ANGLES=5
-DETECT_RANGE=0.5
-SELF_BODY=0.220
+DETECT_RANGE=0.35
+SELF_BODY=0.12
 
 lin = SPEED #todo put in constants
 turn = ANGULAR_SPEED
@@ -46,8 +45,8 @@ def scanCallback(msg):
     front_laser_left = msg.ranges[:OBS_ANGLE]
     front_laser_right = msg.ranges[-OBS_ANGLE:]
     front_laser=np.concatenate((front_laser_left,front_laser_right),axis=None)
-    left_laser = np.mean(msg.ranges[89-SIDE_ANGLES:89+SIDE_ANGLES])
-    right_laser = np.mean(msg.ranges[269-SIDE_ANGLES:269+SIDE_ANGLES])
+    left_laser = msg.ranges[89]
+    right_laser = msg.ranges[269]
 
     # if we detect an object and not turning
     if not turning:
@@ -64,10 +63,10 @@ def scanCallback(msg):
                     right()
                 else: # noisy sensor decision
                     left()
-                
-                break               
 
-   
+                break
+
+
     # if we are already turning (higher threshold than initial turning)
     if turning:
 	safe_to_go_forward = True
@@ -85,10 +84,10 @@ def scanCallback(msg):
 def move_motor(pub):
     global lin
     global turn
-    
+
     #rospy.loginfo("going forward again!")
-    
-    # create message object 
+
+    # create message object
     mc = Twist()
 
     # set speed
@@ -98,18 +97,18 @@ def move_motor(pub):
     # publish message
     pub.publish(mc)
 
-def moveloop(pub): 
-    
-    # set message rate 
+def moveloop(pub):
+
+    # set message rate
     rate = rospy.Rate(20)
 
     # set initial direction
     forward()
 
-    # loop updating 
+    # loop updating
     while not rospy.is_shutdown():
         move_motor(pub)
-        rate.sleep()        
+        rate.sleep()
 
 def scanListener():
 
