@@ -291,7 +291,7 @@ class ParticleFilter(object):
         for _ in range(nb_p):
             p = Particle(map, x, y, yaw)
             # TODO estimate the std for the different operations
-            p.setNoise(0.01, 0.01, 0.5)
+            p.setNoise(0.01, 0.01, 0.05)
             self.particles.append(p)
 
         ### DATA SAVE FOR VISUALISATION ###
@@ -326,6 +326,7 @@ class ParticleFilter(object):
             # get the measurement probability for each particle
             w.append(p.measureProb(mt))
         # normailze the weights.
+        rospy.loginfo("w = {}".format(w))
         self.w = np.array(w)/np.sum(w)
 
     def particleUpdate(self):
@@ -401,6 +402,7 @@ class Robot(object):
         self.map = map
         self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
 
+        rospy.loginfo("Started particle filter node")
         while not rospy.is_shutdown():
             rospy.sleep(10)
         return
@@ -429,7 +431,7 @@ class Robot(object):
         self.particle_filter.particleUpdate()
         x, y, yaw = self.particle_filter.estimate()
 
-        rospy.loginfo("x = {}, y = {}, yaw = {}".format(x, y, yaw))
+        rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
 
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
@@ -486,17 +488,6 @@ def cross(v, w):
     - cross product (@f$(v_x * w_y - v_y * w_x)@f$)
     """
     return v[0]*w[1] - v[1]*w[0]
-
-def evaluation(robot, particles):
-    # Gives the mean error in position between the robot's
-    # actual position and the set of particles
-    sum = 0.0
-    for p in particles: # calculate mean error
-        dx = (p.x - robot.x)
-        dy = (p.y - robot.y)
-        err = np.sqrt(dx**2 + dy**2)
-        sum += err
-    return sum / float(len(particles))
 
 def main():
     rospack = rospkg.RosPack()
