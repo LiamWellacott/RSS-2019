@@ -16,16 +16,19 @@
     <arg name="headless" value="$(arg headless)"/>
   </include>
 
-  <param name="px100_description"
-	   command="$(find xacro)/xacro '$(find px100_description)/urdf/px100.urdf.xacro'"/>
+  <!--
+      <param name="px100_description"
+      command="$(find xacro)/xacro '$(find px100_description)/urdf/px100.urdf.xacro'"/>
+  -->
 
   <param name="turtlebot3_description"
      command="$(find xacro)/xacro '$(find turtlebot3_description)/urdf/turtlebot3_waffle_pi.urdf.xacro'"/>
 
   <node name="turtlebot3_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
 	   args="-urdf -model turtlebot3 -param turtlebot3_description -x 0.5 -y 0.5"/>
-
+  <!--
   <node name="px100_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
-     args="-urdf -model px100 -param px100_description"/>
+  args="-urdf -model px100 -param px100_description"/>
+  -->
 
 </launch>
