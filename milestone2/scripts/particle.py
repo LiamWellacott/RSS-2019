@@ -6,6 +6,14 @@ import json
 import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 from copy import copy as copy
+import rospy
+
+# Message types
+from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Twist
+
+import rospkg
 
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
@@ -298,30 +306,279 @@ class Map(object):
                 points.append(p)
         return np.array(points)
 
-WORLD_MAP = Map("maps/rss_offset.json")
+class Particle(object):
+    """
+    Particle class.
+    """
+    def __init__(self, map, x, y, yaw, x_pert = 0, y_pert = 0, yaw_pert = 0, nb_rays = 8):
+        """
+        Initializes a particle/robot.
+        input:
+        ------
+            - map: a map object reference.
+            - x: initial x position of the robot.
+            - y: initial y position of the robot.
+            - yaw: initial yaw angle of the robot.
+            - x_pert: perturbation around the x position. Default = 0.
+            - y_pert: perturbation around the y position. Default = 0.
+            - yaw_pert: perturbation around the yaw angle. Default = 0.
+            - nb_rays: nomber of rays used for the measurements. Default = 8.
+        """
+        # Initialize particle arround the robot initial pose.
+        self.x = x + np.random.rand()*x_pert
+        self.y = y + np.random.rand()*y_pert
+        self.yaw = yaw + np.random.rand()*yaw_pert
 
-class Robot:
+        # TODO: THIS IS TEMPORARY, NEED TO BE REMOVED AFTER TESTING
+        self.x = np.random.rand()*4.1
+        self.y = np.random.rand()*3.05
+        self.yaw = np.random.uniform(-1, 1) * np.pi
+
+        # Noise for sensing and moving
+        self.move_noise = 0
+        self.turn_noise = 0
+        self.sense_noise = 0
+
+        # Number of rays used to get the measurements.
+        self.nb_rays = nb_rays
+        self.ray_length = 5.32 # sqrt(4.25**2 + 3.20**2)
+
+        # Map of the world
+        self.map = map
+        return
+
+    def __str__(self):
+        return "x {}, y {}, yaw {} ".format(self.x, self.y, self.yaw)
+
+    def setNoise(self, move, turn, sense):
+        """
+        Sets a new pose for the robot.
+        input:
+        ------
+            - move: noise when moving forward.
+            - turn: noise when turning.
+            - sense: noise when sensing.
+        output:
+        -------
+            None
+        """
+        self.move_noise = move
+        self.turn_noise = turn
+        self.sense_noise = sense
+        return
+
+    def measureProb(self, m):
+        """
+        measures the probability of geting a measurement m when in state x.
+        @f$(p(m_t | x))@f$. Where x is the state of the robot.
+        input:
+        ------
+            m: a set of measurement.
+        output:
+        -------
+            p(m|x)
+        """
+        distances = []
+        prob = 1.0
+        for i, angle in enumerate(np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_rays, self.nb_rays)):
+            x = np.cos(angle)*self.ray_length + self.x
+            y = np.sin(angle)*self.ray_length + self.y
+            seg = Segment2(np.array([self.x, self.y]), np.array([x, y]))
+            pts = self.map.intersect(seg)
+            if not pts.size == 0:
+                dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
+                dist = np.amin(dist)
+                prob *= gaussian(dist, self.sense_noise, m[i])
+            else:
+                prob *= 0
+        return prob
+
+    def move(self, x, y, yaw):
+        """
+        Updates the particle position according to the last messages on the
+        /odom topic
+        input:
+        ------
+            - x: the change in x.
+            - y: the change in y.
+            - yaw: the change in yaw
+        output:
+        -------
+            None
+        """
+        self.x += x + np.random.rand() * self.move_noise
+        self.y += y + np.random.rand() * self.move_noise
+        self.yaw += yaw + np.random.rand() * self.turn_noise
+        return
+
+class ParticleFilter(object):
+    """
+    Particle filter class. Manages a set of particles.
+    """
+    def __init__(self, map, nb_p, x = 0, y = 0, yaw = 0, nb_rays = 8):
+        """
+        Initialize the set of paritcles.
+        input:
+        ------
+            nb_p: the number of particles
+        """
+        self.p = []
+        self.w = []
+
+        # estimated value of the robot pose
+        self.x_est = x
+        self.y_est = y
+        self.yaw_est = yaw
+
+        for _ in range(nb_p):
+            p = Particle(map, 0, 0, 0)
+            # TODO estimate the std for the different operations
+            p.setNoise(0.1, 0.1, 0.5)
+            self.p.append(p)
+
+    def actionUpdate(self, action):
+        """
+        Update the particles position after a new transition operation.
+        input:
+        ------
+            action: the set of action [turn, forward]. This will have to be
+            changed when integration with ROS.
+        """
+        for p in self.p:
+            p.move(action[0], action[1], action[2])
+
+    def measurementUpdate(self, mt):
+        """
+        COmpute the weight of each particle given the current measurement.
+        input:
+        ------
+            - mt: the current measurement.
+        output:
+        -------
+            none
+        """
+        # the set of weights
+        w = []
+        for p in self.p:
+            # get the measurement probability for each particle
+            w.append(p.measureProb(mt))
+        # normailze the weights.
+        self.w = w/np.sum(w)
+
+    def particleUpdate(self):
+        """
+        Resampleing process after probability measurement.
+        input:
+        ------
+            None
+        output:
+        -------
+            None
+        """
+        # TODO: put the resampling functions in the particle filter update
+        self.p = resampling(self.p, self.w)
+
+    def plotParticles(self, fig, ax):
+        # Plotting the particles
+        for p in self.p:
+            plt.scatter(p.x, p.y, c='b')
+            plt.quiver(p.x, p.y, 1,1, angles=np.rad2deg(p.yaw), scale=1/5, scale_units="dots",
+            units="dots", color="y", pivot="mid", width=1.25, headwidth=2, headlength=0.5)
+            return fig, ax
+
+    def estimate(self):
+        x = 0
+        y = 0
+        yaw = 0
+        for i, p in enumerate(self.p):
+            x += self.w[i]*p.x
+            y += self.w[i]*p.y
+            yaw += self.w[i]*p.yaw
+        return x, y, yaw
+
+class Robot(object):
     """
     Robot class used to represent particles and simulate the robot to
     test the particles.
     """
-    def __init__(self, map):
+    def __init__(self, map, x, y, yaw, nb_rays = 8):
         """
         Initializes a particle/robot.
         input:
         ------
             - map: a map object reference.
         """
-        self.x = np.random.uniform(-1, 1) * 2.0
-        self.y = np.random.uniform(-1, 1) * 1.5
-        self.yaw = np.random.uniform(-1, 1) * np.pi
-        self.move_noise = 0
-        self.turn_noise = 0
-        self.sense_noise = 0
-        self.nb_ray = 8
-        self.ray_length = 5.32 # sqrt(4.25**2 + 3.20**2)
-        self.world_map = map
+        # initialise
+        rospy.init_node("milestone2", anonymous=True)
+
+        # subscribe
+        rospy.Subscriber("scan", LaserScan, self.scanCallback)
+        rospy.Subscriber("odom", Odometry, self.odomCallback)
+
+        # Pose publisher
+        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
+        self.pose_msg = Twist()
+        self.pose_msg.linear.x = x
+        self.pose_msg.linear.y = y
+        self.pose_msg.angular.z = yaw
+        # timer for pose publisher
+        rospy.Timer(rospy.Duration(0.1), self.pubPose)
+
+        self.x = x
+        self.y = y
+        self.yaw = yaw
+
+        self.x_twist = 0
+        self.y_twist = 0
+        self.yaw_twist = 0
+
+        self.estimate = False
+        self.nb_rays = nb_rays
+        self.map = map
+        self.particle_filter = ParticleFilter(map, 50, x, y, yaw, nb_rays)
+        self.mt = np.zeros((self.nb_rays,))
+
+        while not rospy.is_shutdown():
+            rospy.sleep(10)
         return
+
+    def scanCallback(self, msg):
+        measure = np.zeros((self.nb_rays,))
+        indexes = np.rint(np.linspace(0, 360 - 360/self.nb_rays, self.nb_rays)).astype(int)
+        m = np.array(msg.ranges)
+        measure = m[indexes]
+        self.mt = measure
+        self.poseEstimationUpdate()
+        return
+
+    def odomCallback(self, msg):
+        twist = msg.twist
+        twist = twist.twist
+        self.x_twist += twist.linear.x
+        self.y_twist += twist.linear.y
+        self.yaw_twist += twist.angular.z
+        return
+
+    def poseEstimationUpdate(self):
+        self.particle_filter.actionUpdate([self.x_twist, self.y_twist, self.yaw_twist])
+        self.x_twist = 0
+        self.y_twist = 0
+        self.yaw_twist = 0
+
+        self.particle_filter.measurementUpdate(self.mt)
+        self.particle_filter.particleUpdate()
+        x, y, yaw = self.particle_filter.estimate()
+
+        rospy.loginfo("x {}, y {}, yaw {}".format(x, y, yaw))
+        self.pose_msg.linear.x = x
+        self.pose_msg.linear.y = y
+        self.pose_msg.angular.z = yaw
+        return
+
+    def pubPose(self, event):
+        self.pose_pub.publish(self.pose_msg)
+        return
+
 
     def __str__(self):
         return "x {}, y {}, yaw {} ".format(self.x, self.y, self.yaw)
@@ -341,23 +598,6 @@ class Robot:
         self.x = x
         self.y = y
         self.yaw = yaw
-        return
-
-    def setNoise(self, move, turn, sense):
-        """
-        Sets a new pose for the robot.
-        input:
-        ------
-            - move: noise when moving forward.
-            - turn: noise when turning.
-            - sense: noise when sensing.
-        output:
-        -------
-            None
-        """
-        self.move_noise = move
-        self.turn_noise = turn
-        self.sense_noise = sense
         return
 
     def sense(self):
@@ -410,32 +650,6 @@ class Robot:
         ax.quiver(self.x, self.y, 5,5, angles=np.rad2deg(self.yaw), scale=1/5, scale_units="dots", units="dots", color="k", pivot="mid",width=2.5, headwidth=5, headlength=2.5)
         return fig, ax
 
-    def measureProb(self, m):
-        """
-        measures the probability of geting a measurement m when in state x.
-        @f$(p(m_t | x))@f$. Where x is the state of the robot.
-        input:
-        ------
-            m: a set of measurement.
-        output:
-        -------
-            p(m|x)
-        """
-        distances = []
-        prob = 1.0
-        for i, angle in enumerate(np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_ray, self.nb_ray)):
-            x = np.cos(angle)*self.ray_length + self.x
-            y = np.sin(angle)*self.ray_length + self.y
-            seg = Segment2(np.array([self.x, self.y]), np.array([x, y]))
-            pts = self.world_map.intersect(seg)
-            if not pts.size == 0:
-                dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
-                dist = np.amin(dist)
-                prob *= gaussian(dist, self.sense_noise, m[i])
-            else:
-                prob *= 0
-        return prob
-
     def move(self, turn, forward):
         """
         Simple model to move the robot. This will be change when integrated with
@@ -463,75 +677,6 @@ class Robot:
         # set the new location x, y back to the member variables x y of the class
         self.setPose(x, y, orientation)
         return
-
-class ParticleFilter(object):
-    """
-    Particle filter class. Manages a set of particles.
-    """
-    def __init__(self, nb_p):
-        """
-        Initialize the set of paritcles.
-        input:
-        ------
-            nb_p: the number of particles
-        """
-        self.p = []
-        self.w = []
-
-        for _ in range(nb_p):
-            r = Robot(WORLD_MAP)
-            # TODO estimate the std for the different operations
-            r.setNoise(0.1, 0.1, 0.5)
-            self.p.append(r)
-
-    def actionUpdate(self, action):
-        """
-        Update the particles position after a new transition operation.
-        input:
-        ------
-            action: the set of action [turn, forward]. This will have to be
-            changed when integration with ROS.
-        """
-        for p in self.p:
-            p.move(action[0], action[1])
-
-    def measurementUpdate(self, mt):
-        """
-        COmpute the weight of each particle given the current measurement.
-        input:
-        ------
-            - mt: the current measurement.
-        output:
-        -------
-            none
-        """
-        # the set of weights
-        w = []
-        for p in self.p:
-            # get the measurement probability for each particle
-            w.append(p.measureProb(mt))
-        # normailze the weights.
-        self.w = w/np.sum(w)
-
-    def particleUpdate(self):
-        """
-        Resampleing process after probability measurement.
-        input:
-        ------
-            None
-        output:
-        -------
-            None
-        """
-        self.p = resampling(self.p, self.w)
-
-    def plotParticles(self, fig, ax):
-        # Plotting the particles
-        for p in self.p:
-            plt.scatter(p.x, p.y, c='b')
-            plt.quiver(p.x, p.y, 1,1, angles=np.rad2deg(p.yaw), scale=1/5, scale_units="dots",
-            units="dots", color="y", pivot="mid", width=1.25, headwidth=2, headlength=0.5)
-            return fig, ax
 
 def gaussian(mu, sigma, x):
     """
@@ -651,16 +796,32 @@ def main():
         print('Robot location:', r)
         print("Mean error:",evaluation(r, estimator.p))
 
+def main2():
+    rospack = rospkg.RosPack()
+    path = rospack.get_path('milestone2')
+    map = Map(path + "/maps/rss_offset.json")
+    r = Robot(map, 0, 0, 0, 8)
+
+    #while True:
+
+        # increment move
+
+        # pose poseEstimation
+
+        # check objective
+
+        # sleep for rate
 
 if __name__ == "__main__":
-    fig, ax = plt.subplots()
-    fig, ax = WORLD_MAP.plotMap(fig, ax)
+    main2()
+    #fig, ax = plt.subplots()
+    #fig, ax = WORLD_MAP.plotMap(fig, ax)
     #seg = Segment(np.array([0, 0]), np.array([5, 5]))
-    r = Robot(WORLD_MAP)
-    r.setPose(.5, .5, .5)
-    fig, ax = r.plotRay(fig, ax)
+    #r = Robot(WORLD_MAP)
+    #r.setPose(.5, .5, .5)
+    #fig, ax = r.plotRay(fig, ax)
     #pts = WORLD_MAP.intersect(seg)
     #fig, ax = seg.plotSeg(fig, ax)
     #fig, ax = plotPts(pts, fig, ax)
-    plt.show()
+    #plt.show()
     #main()
