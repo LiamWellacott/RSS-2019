@@ -15,6 +15,23 @@ from geometry_msgs.msg import Twist
 
 import rospkg
 
+# initial position in the map as per the brief
+INITIAL_X = 0.561945
+INITIAL_Y = 0.509381
+INITIAL_YAW = 0.039069
+
+# relative path from package directory
+MAP_FILE = "/maps/rss_offset.json"
+
+NUM_RAYS = 8
+NUM_PARTICLES = 50
+
+PUBLISH_RATE = 0.1
+
+NOISE_MOVE = 0.01
+NOISE_TURN = 0.01
+NOISE_SENSE = 0.5
+
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
 # to it.
@@ -186,11 +203,6 @@ class Particle:
         self.y = y + np.random.rand()*y_pert
         self.yaw = yaw + np.random.rand()*yaw_pert
 
-        # TODO: THIS IS TEMPORARY, NEED TO BE REMOVED AFTER TESTING
-        #self.x = np.random.rand()*4.1
-        #self.y = np.random.rand()*3.05
-        #self.yaw = np.random.uniform(-1, 1) * np.pi
-
         # Noise for sensing and moving
         self.move_noise = 0
         self.turn_noise = 0
@@ -291,7 +303,7 @@ class ParticleFilter(object):
         for _ in range(nb_p):
             p = Particle(map, x, y, yaw)
             # TODO estimate the std for the different operations
-            p.setNoise(0.01, 0.01, 0.05)
+            p.setNoise(NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
             self.particles.append(p)
 
         ### DATA SAVE FOR VISUALISATION ###
@@ -390,7 +402,7 @@ class Robot(object):
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
         # timer for pose publisher
-        rospy.Timer(rospy.Duration(0.1), self.pubPose)
+        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
 
         # set initial position
         self.x = x
@@ -490,10 +502,11 @@ def cross(v, w):
     return v[0]*w[1] - v[1]*w[0]
 
 def main():
+
     rospack = rospkg.RosPack()
     path = rospack.get_path('milestone2')
-    map = Map(path + "/maps/rss_offset.json")
-    r = Robot(map, 50, 0.561945, 0.509381, 0.039069, 8)
+    map = Map(path + MAP_FILE)
+    r = Robot(map, NUM_PARTICLES, INITIAL_X, INITIAL_Y, INITIAL_YAW, NUM_RAYS)
 
 if __name__ == "__main__":
     main()
