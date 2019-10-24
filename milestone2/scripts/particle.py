@@ -16,14 +16,21 @@ from geometry_msgs.msg import Twist
 import rospkg
 
 # initial position in the map as per the brief 
-INITIAL_X = 0
-INITIAL_Y = 0
-INITIAL_YAW = 0
+INITIAL_X = 0.561945
+INITIAL_Y = 0.509381
+INITIAL_YAW = 0.039069
 
 # relative path from package directory
 MAP_FILE = "/maps/rss_offset.json"
 
 NUM_RAYS = 8
+NUM_PARTICLES = 50
+
+PUBLISH_RATE = 0.1
+
+NOISE_MOVE = 0.01
+NOISE_TURN = 0.01
+NOISE_SENSE = 0.5
 
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
@@ -103,7 +110,7 @@ class Map(object):
             output:
             -------
                 - a segment which passes through the world map with the robot at the halfway point
-                This allows us to calculate 2 data points with a single ray trace 
+                This allows us to calculate 2 data points with a single ray trace
         '''
         end_x = np.cos(angle)*self.LENGTH + particle.x
         end_y = np.sin(angle)*self.LENGTH + particle.y
@@ -123,7 +130,7 @@ class Map(object):
             -------
                 - a 2rry of the pairs (point, distance), which represents the two minimum points of intersection in front of the robot and behind.
                 If no valid intersection is found these points will be "None".
-                        
+
         Computes the intersection point between two segments according to
         [https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect]
         '''
@@ -131,7 +138,6 @@ class Map(object):
         # this was to reduce the number of distance calculations, but makes the code not as clean.
         # Possibly change the WORLD_MAP.LENGTH to a World.LENGTH and make the robot use this also.
         # not sure on the type used for return
-
         # Create a line segment to represent the laser beam
         ray = self._createLaser(particle, angle)
 
@@ -149,11 +155,11 @@ class Map(object):
             # find scalar offsets which indicate crossover point
             t = cross((ray.p1 - wall.p1), ray.vec)/prod
             s = cross((wall.p1 - ray.p1), wall.vec)/-prod # because cross(wall.vec, ray.vec) = -cross(ray.vec, wall.vec)
-            
+
             # is the crossover point not within the segment? (segment limits at t or s value 0 and 1)
             if 0.0 > t or t > 1.0 or 0.0 > s or s > 1.0:
                 continue
-            
+
             # There is an intersection, get the point by applying the offset
             point = wall.p1 + t*wall.vec
 
@@ -165,13 +171,15 @@ class Map(object):
             if s >= 0.5 and dist < min_forward_dist:
                 min_forward_point = point
                 min_forward_dist = dist
+
             elif s < 0.5 and dist < min_backward_dist:
                 min_backward_point = point
                 min_backward_dist = dist
 
+
         # return the min intersections in both directions (default is at length of the ray)
-        return [(min_forward_point, min_forward_dist), (min_backward_point, min_backward_dist)]
-        
+        return (min_forward_point, min_backward_point), (min_forward_dist, min_backward_dist)
+
 class Particle:
     """
     Particle class.
@@ -194,11 +202,6 @@ class Particle:
         self.x = x + np.random.rand()*x_pert
         self.y = y + np.random.rand()*y_pert
         self.yaw = yaw + np.random.rand()*yaw_pert
-
-        # TODO: THIS IS TEMPORARY, NEED TO BE REMOVED AFTER TESTING
-        #self.x = np.random.rand()*4.1
-        #self.y = np.random.rand()*3.05
-        #self.yaw = np.random.uniform(-1, 1) * np.pi
 
         # Noise for sensing and moving
         self.move_noise = 0
@@ -246,16 +249,18 @@ class Particle:
         """
         prob = 1.0
         for i, angle in enumerate(np.linspace(self.yaw, self.yaw + np.pi - (2*np.pi/self.nb_rays), self.nb_rays/2)):
-            
+
             # Get the minimum intersections in front and behind the robot at this angle
-            for point, distance in self.map.minIntersections(self, angle):
-                if point is None :
+            points, distances = self.map.minIntersections(self, angle)
+
+            if points[0] is None or points[1] is None:
                     # no intersection found indicating the robot is outside the arena
                     # probability is 0 for whole robot
                     return 0
-                else:
-                    # calculate probability of measurement 
-                    prob *= gaussian(distance, self.sense_noise, m[i])
+            else:
+                # calculate probability of measurement
+                prob *= gaussian(distances[0], self.sense_noise, m[i])
+                prob *= gaussian(distances[1], self.sense_noise, m[i + int(self.nb_rays/2)])
         return prob
 
     def move(self, x, y, yaw):
@@ -288,7 +293,7 @@ class ParticleFilter(object):
             nb_p: the number of particles
         """
         self.particles = []
-        self.w = []
+        self.weights = []
 
         # estimated value of the robot pose
         self.x_est = x
@@ -298,7 +303,7 @@ class ParticleFilter(object):
         for _ in range(nb_p):
             p = Particle(map, x, y, yaw)
             # TODO estimate the std for the different operations
-            p.setNoise(0.01, 0.01, 0.05)
+            p.setNoise(NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
             self.particles.append(p)
 
         ### DATA SAVE FOR VISUALISATION ###
@@ -333,7 +338,7 @@ class ParticleFilter(object):
             # get the measurement probability for each particle
             w.append(p.measureProb(mt))
         # normailze the weights.
-        self.w = w/np.sum(w)
+        self.w = np.array(w)/np.sum(w)
 
     def particleUpdate(self):
         """
@@ -369,13 +374,13 @@ class ParticleFilter(object):
             y += self.w[i]*p.y
             yaw += self.w[i]*p.yaw
         return x, y, yaw
-        
+
 class Robot(object):
     """
     Robot class used to represent particles and simulate the robot to
     test the particles.
     """
-    def __init__(self, map, x, y, yaw, nb_rays = 8):
+    def __init__(self, map, nb_p, x, y, yaw, nb_rays = 8):
         """
         Initializes a particle/robot.
         input:
@@ -396,7 +401,7 @@ class Robot(object):
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
         # timer for pose publisher
-        rospy.Timer(rospy.Duration(0.1), self.pubPose)
+        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
 
         # set initial position
         self.x = x
@@ -406,7 +411,7 @@ class Robot(object):
         # Initialise particle filter
         self.nb_rays = nb_rays
         self.map = map
-        self.particle_filter = ParticleFilter(map, 50, x, y, yaw, nb_rays)
+        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
 
         while not rospy.is_shutdown():
             rospy.sleep(10)
@@ -436,7 +441,8 @@ class Robot(object):
         self.particle_filter.particleUpdate()
         x, y, yaw = self.particle_filter.estimate()
 
-        rospy.loginfo("x {}, y {}, yaw {}".format(x, y, yaw))
+        rospy.loginfo("x = {}, y = {}, yaw = {}".format(x, y, yaw))
+
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
@@ -509,7 +515,7 @@ def main():
     rospack = rospkg.RosPack()
     path = rospack.get_path('milestone2')
     map = Map(path + MAP_FILE)
-    r = Robot(map, INITIAL_X, INITIAL_Y, INITIAL_YAW, NUM_RAYS)
+    r = Robot(map, NUM_PARTICLES, INITIAL_X, INITIAL_Y, INITIAL_YAW, NUM_RAYS)
 
 if __name__ == "__main__":
     main()
