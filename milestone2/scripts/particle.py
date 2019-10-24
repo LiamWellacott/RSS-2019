@@ -361,7 +361,7 @@ class Robot(object):
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
 
-        # Pose publisher
+        # Pose publisher, initialise message
         self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
         self.pose_msg = Twist()
         self.pose_msg.linear.x = x
@@ -370,48 +370,41 @@ class Robot(object):
         # timer for pose publisher
         rospy.Timer(rospy.Duration(0.1), self.pubPose)
 
+        # set initial position
         self.x = x
         self.y = y
         self.yaw = yaw
 
-        self.x_twist = 0
-        self.y_twist = 0
-        self.yaw_twist = 0
-
-        self.estimate = False
+        # Initialise particle filter
         self.nb_rays = nb_rays
         self.map = map
         self.particle_filter = ParticleFilter(map, 50, x, y, yaw, nb_rays)
-        self.mt = np.zeros((self.nb_rays,))
 
         while not rospy.is_shutdown():
             rospy.sleep(10)
         return
 
     def scanCallback(self, msg):
-        measure = np.zeros((self.nb_rays,))
+
+        # get the measurements for the specified number of points out of the scan information
         indexes = np.rint(np.linspace(0, 360 - 360/self.nb_rays, self.nb_rays)).astype(int)
         m = np.array(msg.ranges)
         measure = m[indexes]
-        self.mt = measure
-        self.poseEstimationUpdate()
+
+        # update position estimation
+        self.poseEstimationUpdate(measure)
         return
 
     def odomCallback(self, msg):
-        twist = msg.twist
-        twist = twist.twist
-        self.x_twist += twist.linear.x
-        self.y_twist += twist.linear.y
-        self.yaw_twist += twist.angular.z
+
+        # add the received position increment to the particles
+        twist = msg.twist.twist
+        self.particle_filter.actionUpdate([twist.linear.x, twist.linear.y, twist.angular.z])
         return
 
-    def poseEstimationUpdate(self):
-        self.particle_filter.actionUpdate([self.x_twist, self.y_twist, self.yaw_twist])
-        self.x_twist = 0
-        self.y_twist = 0
-        self.yaw_twist = 0
+    def poseEstimationUpdate(self, measurements):
 
-        self.particle_filter.measurementUpdate(self.mt)
+        self.particle_filter.measurementUpdate(measurements)
         self.particle_filter.particleUpdate()
         x, y, yaw = self.particle_filter.estimate()
 
