@@ -13,6 +13,9 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 
+from gazebo_msgs.msg import ModelStates
+import tf
+import sys
 import rospkg
 
 # initial position in the map as per the brief
@@ -28,9 +31,14 @@ NUM_PARTICLES = 50
 
 PUBLISH_RATE = 0.1
 
-NOISE_MOVE = 0.01
-NOISE_TURN = 0.01
+ODOM_RATE = 30
+
+NOISE_MOVE = 0.05
+NOISE_TURN = 0.05
 NOISE_SENSE = 0.5
+
+
+MAX_VAL = 150
 
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
@@ -66,6 +74,15 @@ class Segment(object):
 
     def _toArray(self):
         return np.array([self.p1, self.p2])
+
+    def plotSeg(self, fig, ax):
+        lines = [self._toArray()]
+        c = [(1,0,0,1)]
+        lc = mc.LineCollection(lines, linestyles='dashed', colors=c, linewidth=2)
+        ax.add_collection(lc)
+        ax.autoscale()
+        ax.margins(0.1)
+        return fig, ax
 
 class Map(object):
 
@@ -180,7 +197,18 @@ class Map(object):
         # return the min intersections in both directions (default is at length of the ray)
         return (min_forward_point, min_backward_point), (min_forward_dist, min_backward_dist)
 
-class Particle:
+    def plotMap(self, fig, ax):
+        lines = []
+        for seg in self.segments:
+            lines.append(seg._toArray())
+            #fig, ax = seg.plotPerp(fig, ax)
+        lc = mc.LineCollection(lines, linewidth=2)
+        ax.add_collection(lc)
+        ax.autoscale()
+        ax.margins(0.1)
+        return fig, ax
+
+class Particle(object):
     """
     Particle class.
     """
@@ -263,7 +291,7 @@ class Particle:
                 prob *= gaussian(distances[1], self.sense_noise, m[i + int(self.nb_rays/2)])
         return prob
 
-    def move(self, x, y, yaw):
+    def move(self, x_vel, y_vel, yaw_vel):
         """
         Updates the particle position according to the last messages on the
         /odom topic
@@ -276,9 +304,17 @@ class Particle:
         -------
             None
         """
-        self.x += x + np.random.uniform(-1, 1) * self.move_noise
-        self.y += y + np.random.uniform(-1, 1) * self.move_noise
+        # Calculate distance in robot frame
+        # First turn
+        yaw = yaw_vel/ODOM_RATE
+        # X and Y velocity
+        x = x_vel/ODOM_RATE
+        y = y_vel/ODOM_RATE
+        # update yaw position.
         self.yaw += yaw + np.random.uniform(-1, 1) * self.turn_noise
+        # project x and y
+        self.x += x*np.cos(self.yaw) + np.random.uniform(-1, 1) * self.move_noise
+        self.y += y*np.sin(self.yaw) + np.random.uniform(-1, 1) * self.move_noise
         return
 
 class ParticleFilter(object):
@@ -308,10 +344,30 @@ class ParticleFilter(object):
 
         ### DATA SAVE FOR VISUALISATION ###
         self.dict = {}
-        self.i = 0
-        self.MAX = 50
+        self.counter = 0
+        self.MAX_VAL = MAX_VAL
+        self.true_x = 0
+        self.true_y = 0
+        self.true_yaw = 0
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.modelCB)
 
-    def actionUpdate(self, x, y, yaw):
+    def modelCB(self, msg):
+        j = 0
+        for i, s in enumerate(msg.name):
+            if s == "turtlebot3":
+                j = i
+        pose = msg.pose[j]
+        self.true_x = pose.position.x
+        self.true_y = pose.position.y
+        orientation = (
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z,
+            pose.orientation.w
+        )
+        self.true_yaw = tf.transformations.euler_from_quaternion(orientation)[2]
+
+    def actionUpdate(self, x_vel, y_vel, yaw_vel):
         """
         Update the particles position after a new transition operation.
         input:
@@ -320,7 +376,7 @@ class ParticleFilter(object):
             changed when integration with ROS.
         """
         for p in self.particles:
-            p.move(x, y, yaw)
+            p.move(x_vel, y_vel, yaw_vel)
 
     def measurementUpdate(self, mt):
         """
@@ -351,6 +407,10 @@ class ParticleFilter(object):
         -------
             None
         """
+        if self.counter < self.MAX_VAL:
+            rospy.loginfo("UPDATE")
+            rospy.loginfo("{} / {}".format(self.counter, self.MAX_VAL))
+            self.updateData()
         # Resample TODO implement
         N = len(self.particles)
         beta=0
@@ -375,6 +435,24 @@ class ParticleFilter(object):
             y += self.w[i]*p.y
             yaw += self.w[i]*p.yaw
         return x, y, yaw
+
+    def updateData(self):
+        parts = []
+        robot = {"x" : self.true_x, "y" : self.true_y, "yaw" : self.true_yaw}
+        print(len(self.particles))
+        for j, p in enumerate(self.particles):
+            a = {j: [p.x, p.y, p.yaw]}
+            parts.append(a)
+        self.dict.update({self.counter: parts, str(self.counter) + "robot": robot})
+
+        self.counter += 1
+        if self.counter >= self.MAX_VAL:
+            rospy.loginfo("DUMP FUCKING DATA")
+            self.dumpData("test.json")
+
+    def dumpData(self, file_path):
+        with open(file_path, 'w') as file:
+            json.dump(self.dict, file)
 
 class Robot(object):
     """
@@ -433,8 +511,8 @@ class Robot(object):
     def odomCallback(self, msg):
 
         # add the received position increment to the particles
-        twist = msg.twist.twist
-        self.particle_filter.actionUpdate(twist.linear.x, twist.linear.y, twist.angular.z)
+        vel = msg.twist.twist
+        self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
         return
 
     def poseEstimationUpdate(self, measurements):
