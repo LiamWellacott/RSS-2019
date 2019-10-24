@@ -15,6 +15,16 @@ from geometry_msgs.msg import Twist
 
 import rospkg
 
+# initial position in the map as per the brief 
+INITIAL_X = 0
+INITIAL_Y = 0
+INITIAL_YAW = 0
+
+# relative path from package directory
+MAP_FILE = "/maps/rss_offset.json"
+
+NUM_RAYS = 8
+
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
 # to it.
@@ -495,10 +505,11 @@ def evaluation(robot, particles):
     return sum / float(len(particles))
 
 def main():
+
     rospack = rospkg.RosPack()
     path = rospack.get_path('milestone2')
-    map = Map(path + "/maps/rss_offset.json")
-    r = Robot(map, 0, 0, 0, 8)
+    map = Map(path + MAP_FILE)
+    r = Robot(map, INITIAL_X, INITIAL_Y, INITIAL_YAW, NUM_RAYS)
 
 if __name__ == "__main__":
     main()
