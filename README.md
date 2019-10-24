@@ -23,4 +23,5 @@ Right now only a run
  - [ ] find a simpler and more elegant way to compute intersections between segments.
  - [ ] implement various resampling algorithms and evaluate their performances.
  - [ ] comment the files:
-      * [x] particle.py 
+      * [x] particle.py
+ - [ ] need to find a probability that takes the direction into account
