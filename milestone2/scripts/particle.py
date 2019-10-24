@@ -330,8 +330,20 @@ class ParticleFilter(object):
         -------
             None
         """
-        self.particles = resampling(self.particles, self.w) #TODO resampling should be in the filter
-
+        N = len(self.particles)
+        beta=0
+        j=0
+        w_max= max(self.w)
+        p_temp=[]
+        for _ in range(N):
+            beta += 2.0*w_max*np.random.rand()
+            while beta>self.w[j]:
+                beta -= self.w[j]
+                j=(j + 1) % N
+            selectedParticle = copy(self.particles[j])
+            p_temp.append(selectedParticle) # if beta<w[index], this indexed particle is selected
+        self.particles = p_temp
+   
     def estimate(self):
         x = 0
         y = 0
@@ -464,32 +476,6 @@ def cross(v, w):
     - cross product (@f$(v_x * w_y - v_y * w_x)@f$)
     """
     return v[0]*w[1] - v[1]*w[0]
-
-def resampling(p, w):
-    """
-    Resampling operation.
-    input:
-    ------
-        - p: a set of particles
-        - w: a set of weight associated with each partilces.
-    output:
-    -------
-        - resampled set of particles.
-    """
-    # TODO: Probably better if the function is put inside the ParticleFilter
-    N = len(p)
-    beta=0
-    j=0
-    w_max= max(w)
-    p_temp=[]
-    for _ in range(N):
-        beta += 2.0*w_max*np.random.rand()
-        while beta>w[j]:
-            beta -= w[j]
-            j=(j + 1) % N
-        selectedParticle = copy(p[j])
-        p_temp.append(selectedParticle) # if beta<w[index], this indexed particle is selected
-    return p_temp
 
 def evaluation(robot, particles):
     # Gives the mean error in position between the robot's
