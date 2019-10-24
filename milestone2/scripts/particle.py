@@ -20,146 +20,6 @@ import rospkg
 # to it.
 class Segment(object):
     """
-    Segment representation class.
-    """
-    def __init__(self, p1, p2):
-        """
-        Segment constructor.
-            input:
-            -----
-                - first point p1 as array [x1, y1]
-                - second point p2 as array [x2, y2]
-        """
-        # p1 is always the point with the smallest x
-        if p1[0] < p2[0]:
-            self.p1 = p1
-            self.p2 = p2
-        else:
-            self.p1 = p2
-            self.p2 = p1
-        self.vert = False
-        # special case where we assume the segment to be vertical.
-        if np.abs(p1[0] - p2[0]) < 0.0001:
-            self.vert = True
-            self.m = np.nan
-            self.b = np.nan
-        else:
-            # precomputation of the slope and intersect to speed up
-            # the computation in the intersection process
-            self.m = (self.p1[1] - self.p2[1]) / (self.p1[0] - self.p2[0])
-            self.b =  self.p1[1] - self.m*self.p1[0]
-        self.empty = np.full(2, np.nan)
-
-    def _orientation(self, p):
-        """
-        Computes the orientation of 3 given points.
-        Either in clockwise order, counterclockwise or colinear.
-            input:
-            ------
-                - p: a point in space.
-            output:
-            -------
-                - a value between 0 and 2. 0 if colinear, 1 if clockwise and 2 if counterclockwise.
-        """
-        val = (self.p2[1] - self.p1[1]) * (p[0] - self.p2[0]) - \
-              (self.p2[0] - self.p1[0]) * (p[1] - self.p2[1])
-        if val == 0:
-            return 0
-        elif val > 0:
-            return 1
-        else:
-            return 2
-
-    def _isIntersect(self, seg):
-        """
-        Checks if a segment and self intersect.
-            input:
-            ------
-                - seg: a segment.
-            output:
-            -------
-                - boolean: True if intersection, False otherwise.
-        """
-        o1 = self._orientation(seg.p1)
-        o2 = self._orientation(seg.p2)
-        o3 = seg._orientation(self.p1)
-        o4 = seg._orientation(self.p2)
-        if o1 != o2 and o3 != o4:
-            return True
-        return False
-
-    def intersect(self, seg):
-        """
-        Computes the intersection point of a segments and self.
-        input:
-        -----
-            - seg: a segment
-        output:
-        -------
-            - point [x, y] of the intersection if one found or a array filed with
-            nan if none found.
-        """
-        # We consider the segments as lines to find intersection point and then
-        # we check if the given point is on the two segments.
-        if self.vert and seg.vert:
-            # both lines a verticals, therefore parallel
-            return self.empty
-
-        if not self.vert and not seg.vert:
-            # none of the lines are vertical.
-            if self.m - seg.m == 0:
-                # lines are paralle
-                return self.empty
-            # setting y to be equal in the two lines to find the intersection
-            # point.
-            x = (seg.b - self.b) / (self.m - seg.m)
-            y = self.m*x + self.b
-
-        # One of the two lines is vertical. We use the other line's slope and
-        # intercept to find the intersection point.
-        if self.vert:
-            y = seg.m * self.p1[0] + seg.b
-            x = self.p1[0]
-
-        if seg.vert:
-            y = self.m * seg.p1[0] + self.b
-            x = seg.p1[0]
-
-        x1a = self.p1[0]
-        x1b = self.p2[0]
-
-        x2a = seg.p1[0]
-        x2b = seg.p2[0]
-
-        y1a = min(self.p1[1], self.p2[1])
-        y1b = max(self.p1[1], self.p2[1])
-
-        y2a = min(seg.p1[1], seg.p2[1])
-        y2b = max(seg.p1[1], seg.p2[1])
-        if x1b < x or x < x1a or x2b < x or x < x2a or \
-           y1b < y or y < y1a or y2b < y or y < y2a:
-            # Check if the computed point is located on both of the segments.
-            return self.empty
-
-        return np.array([x, y])
-
-    def __str__(self):
-        return self._toArray().__str__()
-
-    def _toArray(self):
-        return np.array([self.p1, self.p2])
-
-    def plotSeg(self, fig, ax):
-        lines = [self._toArray()]
-        c = [(1,0,0,1)]
-        lc = mc.LineCollection(lines, linestyles='dashed', colors=c, linewidth=2)
-        ax.add_collection(lc)
-        ax.autoscale()
-        ax.margins(0.1)
-        return fig, ax
-
-class Segment2(object):
-    """
     Class to represent a vector. This class alows operation such as checking
     intersection with two vectors.
     """
@@ -174,45 +34,15 @@ class Segment2(object):
             -------
                 - None
         """
-        #orientation always from p1 to p2
-        #if p1[0] < p2[0]:
-        #    self.p1 = p1
-        #    self.p2 = p2
-        #    self.vec = p2 - p1
-        #else:
-        #    self.p1 = p2
-        #    self.p2 = p1
-        #    self.vec = p1 - p2
         self.p1 = p1
         self.p2 = p2
         self.vec = p2 - p1
+
+        # Store the vectors perpendicular for collision calculation
         self.perp = np.copy(self.vec)
         tmp = self.perp[0]
         self.perp[0] = -self.perp[1]
         self.perp[1] = tmp
-        return
-
-    def intersect(self, seg):
-        """
-        Computes the intersection point between two segments according to
-        [https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect]
-            input:
-            ------
-                - seg: The second segment
-            output:
-            -------
-                - intersection point if one is found, or a 2D array of nan if
-                none is found.
-        """
-        if np.dot(self.perp, seg.vec) >= 0:
-            return np.full(2, np.nan)
-
-        t = cross((seg.p1 - self.p1), seg.vec)/cross(self.vec, seg.vec)
-        s = cross((self.p1 - seg.p1), self.vec)/cross(seg.vec, self.vec)
-        # intersection
-        if 0.0 > t or t > 1.0 or 0.0 > s or s > 1.0:
-            return np.full(2, np.nan)
-        return self.p1 + t*self.vec
 
     def __str__(self):
         return self._toArray().__str__()
@@ -220,28 +50,10 @@ class Segment2(object):
     def _toArray(self):
         return np.array([self.p1, self.p2])
 
-    def plotSeg(self, fig, ax):
-        lines = [self._toArray()]
-        c = [(1,0,0,1)]
-        lc = mc.LineCollection(lines, linestyles='dashed', colors=c, linewidth=2)
-        ax.add_collection(lc)
-        ax.autoscale()
-        ax.margins(0.1)
-        return fig, ax
-
-    def plotPerp(self, fig, ax):
-        point = (self.p1 + self.p2) / 2
-        norm = self.perp/np.linalg.norm(self.perp)
-        #lines = [[point, point+(self.perp/np.sum(self.perp))]]
-        #c = [(0,1,0,1)]
-        #lc = mc.LineCollection(lines, linestyles='dotted', colors=c, linewidth=2)
-        #ax.add_collection(lc)
-        ax.quiver(point[0], point[1], norm[0]/100., norm[1]/100., color=['g'], scale=0.2)
-        ax.autoscale()
-        ax.margins(0.1)
-        return fig, ax
-
 class Map(object):
+
+    LENGTH = 5.32 # sqrt(4.25**2 + 3.20**2)
+
     """
     Class representing the map. It has a set of segments.
     """
@@ -262,7 +74,7 @@ class Map(object):
             for seg in data['segments']:
                 p1 = np.array(seg[0])
                 p2 = np.array(seg[1])
-                s = Segment2(p1, p2)
+                s = Segment(p1, p2)
                 self.segments.append(s)
 
     def __str__(self):
@@ -272,41 +84,85 @@ class Map(object):
             ret += "\n"
         return ret
 
-    def plotMap(self, fig, ax):
-        lines = []
-        for seg in self.segments:
-            lines.append(seg._toArray())
-            fig, ax = seg.plotPerp(fig, ax)
-        lc = mc.LineCollection(lines, linewidth=2)
-        ax.add_collection(lc)
-        ax.autoscale()
-        ax.margins(0.1)
-        return fig, ax
-
-    def intersect(self, segment):
-        """
-        Computes the intersection points of a segment with every segment of
-        the map.
+    def _createLaser(self, particle, angle):
+        '''
             input:
             ------
-                - segment: a segment.
+                - particle : The Robot which is the object of the ray trace, used for position
+                - angle : what angle relative to the current yaw to cast the ray through the robot
             output:
             -------
-                - a set of points which are the different intersection points.
-        """
-        points = []
-        # TODO: is seems from profiling that intersect if evaluated very often
-        # it could probably be worse to reduce the search space for intersection.
-        for seg in self.segments:
-            p = seg.intersect(segment)
-            # the if statement doesn't look optimal. Could be worse to return
-            # true or false when a intersection point is found. np.isnan().any()
-            # seems to be a expensive operation.
-            if not np.isnan(p).any():
-                points.append(p)
-        return np.array(points)
+                - a segment which passes through the world map with the robot at the halfway point
+                This allows us to calculate 2 data points with a single ray trace 
+        '''
+        end_x = np.cos(angle)*self.LENGTH + particle.x
+        end_y = np.sin(angle)*self.LENGTH + particle.y
 
-class Particle(object):
+        start_x = -np.cos(angle)*self.LENGTH + particle.x
+        start_y = -np.sin(angle)*self.LENGTH + particle.y
+
+        return Segment(np.array([start_x, start_y]), np.array([end_x, end_y]))
+
+    def minIntersections(self, particle, angle):
+        '''
+            input:
+            ------
+                - particle : The Robot which is the focus of the ray trace, used for position
+                - angle : what angle relative to the current yaw to cast the ray through the robot
+            output:
+            -------
+                - a 2rry of the pairs (point, distance), which represents the two minimum points of intersection in front of the robot and behind.
+                If no valid intersection is found these points will be "None".
+                        
+        Computes the intersection point between two segments according to
+        [https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect]
+        '''
+        # TODO REVIEW used variables to store the distance when point is sufficient
+        # this was to reduce the number of distance calculations, but makes the code not as clean.
+        # Possibly change the WORLD_MAP.LENGTH to a World.LENGTH and make the robot use this also.
+        # not sure on the type used for return
+
+        # Create a line segment to represent the laser beam
+        ray = self._createLaser(particle, angle)
+
+        # initialise minimum intersection vars
+        min_forward_point = min_backward_point = None
+        min_forward_dist = min_backward_dist = self.LENGTH
+
+        # check collisions of ray with each of the worlds walls
+        for wall in self.segments:
+
+            prod = cross(wall.vec, ray.vec)
+            if prod == 0: # filter rare case of parallel
+                continue
+
+            # find scalar offsets which indicate crossover point
+            t = cross((ray.p1 - wall.p1), ray.vec)/prod
+            s = cross((wall.p1 - ray.p1), wall.vec)/-prod # because cross(wall.vec, ray.vec) = -cross(ray.vec, wall.vec)
+            
+            # is the crossover point not within the segment? (segment limits at t or s value 0 and 1)
+            if 0.0 > t or t > 1.0 or 0.0 > s or s > 1.0:
+                continue
+            
+            # There is an intersection, get the point by applying the offset
+            point = wall.p1 + t*wall.vec
+
+            # measure distance to the point of intersection from the robot
+            dist = np.linalg.norm(point - np.array([particle.x, particle.y]))
+
+            # if scalar is more than halfway (0.5) the obstacale is in front of robot, otherwise behind.
+            # check if the newly found intersection is closer than previously measured points (for a given direction)
+            if s >= 0.5 and dist < min_forward_dist:
+                min_forward_point = point
+                min_forward_dist = dist
+            elif s < 0.5 and dist < min_backward_dist:
+                min_backward_point = point
+                min_backward_dist = dist
+
+        # return the min intersections in both directions (default is at length of the ray)
+        return [(min_forward_point, min_forward_dist), (min_backward_point, min_backward_dist)]
+        
+class Particle:
     """
     Particle class.
     """
@@ -341,10 +197,10 @@ class Particle(object):
 
         # Number of rays used to get the measurements.
         self.nb_rays = nb_rays
-        self.ray_length = 5.32 # sqrt(4.25**2 + 3.20**2)
 
         # Map of the world
         self.map = map
+
         return
 
     def __str__(self):
@@ -378,19 +234,18 @@ class Particle(object):
         -------
             p(m|x)
         """
-        distances = []
         prob = 1.0
-        for i, angle in enumerate(np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_rays, self.nb_rays)):
-            x = np.cos(angle)*self.ray_length + self.x
-            y = np.sin(angle)*self.ray_length + self.y
-            seg = Segment2(np.array([self.x, self.y]), np.array([x, y]))
-            pts = self.map.intersect(seg)
-            if not pts.size == 0:
-                dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
-                dist = np.amin(dist)
-                prob *= gaussian(dist, self.sense_noise, m[i])
-            else:
-                prob *= 0
+        for i, angle in enumerate(np.linspace(self.yaw, self.yaw + np.pi - (2*np.pi/self.nb_rays), self.nb_rays/2)):
+            
+            # Get the minimum intersections in front and behind the robot at this angle
+            for point, distance in self.map.minIntersections(self, angle):
+                if point is None :
+                    # no intersection found indicating the robot is outside the arena
+                    # probability is 0 for whole robot
+                    return 0
+                else:
+                    # calculate probability of measurement 
+                    prob *= gaussian(distance, self.sense_noise, m[i])
         return prob
 
     def move(self, x, y, yaw):
@@ -422,7 +277,7 @@ class ParticleFilter(object):
         ------
             nb_p: the number of particles
         """
-        self.p = []
+        self.particles = []
         self.w = []
 
         # estimated value of the robot pose
@@ -434,7 +289,7 @@ class ParticleFilter(object):
             p = Particle(map, 0, 0, 0)
             # TODO estimate the std for the different operations
             p.setNoise(0.1, 0.1, 0.5)
-            self.p.append(p)
+            self.particles.append(p)
 
     def actionUpdate(self, action):
         """
@@ -444,7 +299,7 @@ class ParticleFilter(object):
             action: the set of action [turn, forward]. This will have to be
             changed when integration with ROS.
         """
-        for p in self.p:
+        for p in self.particles:
             p.move(action[0], action[1], action[2])
 
     def measurementUpdate(self, mt):
@@ -459,7 +314,7 @@ class ParticleFilter(object):
         """
         # the set of weights
         w = []
-        for p in self.p:
+        for p in self.particles:
             # get the measurement probability for each particle
             w.append(p.measureProb(mt))
         # normailze the weights.
@@ -475,22 +330,13 @@ class ParticleFilter(object):
         -------
             None
         """
-        # TODO: put the resampling functions in the particle filter update
-        self.p = resampling(self.p, self.w)
-
-    def plotParticles(self, fig, ax):
-        # Plotting the particles
-        for p in self.p:
-            plt.scatter(p.x, p.y, c='b')
-            plt.quiver(p.x, p.y, 1,1, angles=np.rad2deg(p.yaw), scale=1/5, scale_units="dots",
-            units="dots", color="y", pivot="mid", width=1.25, headwidth=2, headlength=0.5)
-            return fig, ax
+        self.particles = resampling(self.particles, self.w) #TODO resampling should be in the filter
 
     def estimate(self):
         x = 0
         y = 0
         yaw = 0
-        for i, p in enumerate(self.p):
+        for i, p in enumerate(self.particles):
             x += self.w[i]*p.x
             y += self.w[i]*p.y
             yaw += self.w[i]*p.yaw
@@ -579,7 +425,6 @@ class Robot(object):
         self.pose_pub.publish(self.pose_msg)
         return
 
-
     def __str__(self):
         return "x {}, y {}, yaw {} ".format(self.x, self.y, self.yaw)
 
@@ -598,84 +443,6 @@ class Robot(object):
         self.x = x
         self.y = y
         self.yaw = yaw
-        return
-
-    def sense(self):
-        """
-        Sensing for the simulated robot. This will have to be replaced with
-        true sensing from the robot when integrated with ros. Extra return
-        values are given for plotting and visualisation.
-        input:
-        ------
-            None
-        output:
-        -------
-            - lines: the set of ray used for sensing. Expressed in pair of points.
-            - points: the intersection point of each ray with the world.
-            - distances: the measured distances from the robot to the sensed point.
-        """
-        lines = []
-        points = []
-        distances = []
-        for angle in np.linspace(self.yaw, self.yaw + 2*np.pi - 2*np.pi/self.nb_ray, self.nb_ray):
-            x = np.cos(angle)*self.ray_length + self.x
-            y = np.sin(angle)*self.ray_length + self.y
-            seg = Segment2(np.array([self.x, self.y]), np.array([x, y]))
-            pts = self.world_map.intersect(seg)
-            if not pts.size == 0:
-                dist = np.linalg.norm(pts - np.array([self.x, self.y]), axis=1)
-                pt = pts[np.argmin(dist)]
-                dist = np.amin(dist)
-                distances.append(dist + np.random.rand()*self.sense_noise)
-                points.append(pt)
-                lines.append([(self.x, self.y), (pt[0], pt[1])])
-            else:
-                lines.append([(self.x, self.y), (x, y)])
-        return lines, points, distances
-
-    def plotRay(self, fig, ax):
-        lines, points, _ = self.sense()
-        value = np.empty((), dtype=object)
-        c = [(1,0,0,1), (0,1,0,1), (0,0,1,1), (1,1,0,1), (1,0,1,1), (0,1,1,1), (0,0,0,1), (0,0,0,1)]
-        lc = mc.LineCollection(lines, colors=c, linestyles='dashed', linewidth=2)
-        ax.add_collection(lc)
-        ax.autoscale()
-        ax.margins(0.1)
-        for point in points:
-            ax.plot(point[0], point[1], 'ro')
-        return fig, ax
-
-    def plotRobot(self, fig, ax):
-        ax.scatter(self.x, self.y, c='r', s=500)
-        ax.quiver(self.x, self.y, 5,5, angles=np.rad2deg(self.yaw), scale=1/5, scale_units="dots", units="dots", color="k", pivot="mid",width=2.5, headwidth=5, headlength=2.5)
-        return fig, ax
-
-    def move(self, turn, forward):
-        """
-        Simple model to move the robot. This will be change when integrated with
-        ROS. This function is only there to update the robot state.
-        input:
-        ------
-            - turn: the yaw change.
-            - forward: the quantiy of forward mvt.
-        output:
-        -------
-            None
-        """
-        if forward < 0:
-            raise ValueError('Robot cant move backwards')
-
-        # turn, and add Gaussian noise to the turning command
-        orientation = self.yaw + float(turn) + np.random.randn()*self.turn_noise
-        orientation %= 2 * np.pi # make sure: 0=< orientation <=2*pi
-
-        # move, and add Gaussian noise to the motion command
-        dist = float(forward) + np.random.randn()*self.move_noise
-        x = self.x + (np.cos(orientation) * dist)
-        y = self.y + (np.sin(orientation) * dist)
-
-        # set the new location x, y back to the member variables x y of the class
-        self.setPose(x, y, orientation)
         return
 
 def gaussian(mu, sigma, x):
@@ -722,7 +489,7 @@ def resampling(p, w):
     j=0
     w_max= max(w)
     p_temp=[]
-    for i in range(N):
+    for _ in range(N):
         beta += 2.0*w_max*np.random.rand()
         while beta>w[j]:
             beta -= w[j]
@@ -734,7 +501,7 @@ def resampling(p, w):
 def evaluation(robot, particles):
     # Gives the mean error in position between the robot's
     # actual position and the set of particles
-    sum = 0.0;
+    sum = 0.0
     for p in particles: # calculate mean error
         dx = (p.x - robot.x)
         dy = (p.y - robot.y)
@@ -742,86 +509,11 @@ def evaluation(robot, particles):
         sum += err
     return sum / float(len(particles))
 
-def plotPts(pts, fig, ax):
-    for pt in pts:
-        ax.plot(pt[0], pt[1], 'ro')
-    return fig, ax
-
 def main():
-    r = Robot(WORLD_MAP)
-    r.setPose(-.5, .5, 0)
-    r.setNoise(0.0, 0.0, 0.0)
-
-    steps = 100
-    heading = 15.0/180.0*np.pi
-    steplength = .1
-
-    # Initialize the state estimator
-    estimator = ParticleFilter(50)
-    # plot robot, environment and particles
-    #fig, ax = plt.subplots()
-    #fig, ax = plotParticles(estimator.p, fig, ax)
-    #fig, ax = r.plotRobot(fig, ax)
-    #fig, ax = r.world_map.plotMap(fig, ax)
-    #plt.show()
-
-    # for each step update the belief
-    for s in range(steps):
-        # Implement the particle filter algorithm
-        # move robot
-        r.move(heading, steplength)
-
-        # update pose of each particle according to the motion model
-        estimator.actionUpdate([heading, steplength])
-
-        # obtain a sensor reading
-        _, _, measure = r.sense()
-        fig, ax = plt.subplots()
-        fig, ax = r.plotRay(fig, ax)
-        fig, ax = r.plotRobot(fig, ax)
-        fig, ax = r.world_map.plotMap(fig, ax)
-        plt.show()
-        # update the weights of the particles according to the measrement model
-        estimator.measurementUpdate(measure)
-
-        # update the particles according to resampling process
-        estimator.particleUpdate()
-
-        #fig, ax = plt.subplots()
-        #fig, ax = plotParticles(estimator.p, fig, ax)
-        #fig, ax = r.plotRobot(fig, ax)
-        #fig, ax = r.world_map.plotMap(fig, ax)
-        #plt.show()
-        print('Step: ',  s)
-        print('Robot location:', r)
-        print("Mean error:",evaluation(r, estimator.p))
-
-def main2():
     rospack = rospkg.RosPack()
     path = rospack.get_path('milestone2')
     map = Map(path + "/maps/rss_offset.json")
     r = Robot(map, 0, 0, 0, 8)
 
-    #while True:
-
-        # increment move
-
-        # pose poseEstimation
-
-        # check objective
-
-        # sleep for rate
-
 if __name__ == "__main__":
-    main2()
-    #fig, ax = plt.subplots()
-    #fig, ax = WORLD_MAP.plotMap(fig, ax)
-    #seg = Segment(np.array([0, 0]), np.array([5, 5]))
-    #r = Robot(WORLD_MAP)
-    #r.setPose(.5, .5, .5)
-    #fig, ax = r.plotRay(fig, ax)
-    #pts = WORLD_MAP.intersect(seg)
-    #fig, ax = seg.plotSeg(fig, ax)
-    #fig, ax = plotPts(pts, fig, ax)
-    #plt.show()
-    #main()
+    main()
