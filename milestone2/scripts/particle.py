@@ -330,9 +330,9 @@ class Particle(object):
         self.yaw = yaw + np.random.rand()*yaw_pert
 
         # TODO: THIS IS TEMPORARY, NEED TO BE REMOVED AFTER TESTING
-        self.x = np.random.rand()*4.1
-        self.y = np.random.rand()*3.05
-        self.yaw = np.random.uniform(-1, 1) * np.pi
+        #self.x = np.random.rand()*4.1
+        #self.y = np.random.rand()*3.05
+        #self.yaw = np.random.uniform(-1, 1) * np.pi
 
         # Noise for sensing and moving
         self.move_noise = 0
@@ -406,9 +406,9 @@ class Particle(object):
         -------
             None
         """
-        self.x += x + np.random.rand() * self.move_noise
-        self.y += y + np.random.rand() * self.move_noise
-        self.yaw += yaw + np.random.rand() * self.turn_noise
+        self.x += x + np.random.uniform(-1, 1) * self.move_noise
+        self.y += y + np.random.uniform(-1, 1) * self.move_noise
+        self.yaw += yaw + np.random.uniform(-1, 1) * self.turn_noise
         return
 
 class ParticleFilter(object):
@@ -431,12 +431,17 @@ class ParticleFilter(object):
         self.yaw_est = yaw
 
         for _ in range(nb_p):
-            p = Particle(map, 0, 0, 0)
+            p = Particle(map, x, y, yaw)
             # TODO estimate the std for the different operations
-            p.setNoise(0.1, 0.1, 0.5)
+            p.setNoise(0.01, 0.01, 0.05)
             self.p.append(p)
 
-    def actionUpdate(self, action):
+        ### DATA SAVE FOR VISUALISATION ###
+        self.dict = {}
+        self.i = 0
+        self.MAX = 50
+
+    def actionUpdate(self, x, y, yaw):
         """
         Update the particles position after a new transition operation.
         input:
@@ -445,7 +450,7 @@ class ParticleFilter(object):
             changed when integration with ROS.
         """
         for p in self.p:
-            p.move(action[0], action[1], action[2])
+            p.move(x, y, yaw)
 
     def measurementUpdate(self, mt):
         """
@@ -475,6 +480,8 @@ class ParticleFilter(object):
         -------
             None
         """
+        # UNCOMMENT THIS TO SAVE THE DATA TO A JSON FILE
+        self.updateData()
         # TODO: put the resampling functions in the particle filter update
         self.p = resampling(self.p, self.w)
 
@@ -495,6 +502,21 @@ class ParticleFilter(object):
             y += self.w[i]*p.y
             yaw += self.w[i]*p.yaw
         return x, y, yaw
+
+    def updateData(self):
+        parts = []
+        for j, p in enumerate(self.p):
+            a = {j: [p.x, p.y, p.yaw]}
+            parts.append(a)
+        self.dict.update({self.i: parts})
+        self.i += 1
+
+        if self.MAX < self.i:
+            self.dumpData("test.json")
+
+    def dumpData(self, file_path):
+        with open(file_path, 'w') as file:
+            json.dump(self.dict, file)
 
 class Robot(object):
     """
@@ -554,17 +576,10 @@ class Robot(object):
     def odomCallback(self, msg):
         twist = msg.twist
         twist = twist.twist
-        self.x_twist += twist.linear.x
-        self.y_twist += twist.linear.y
-        self.yaw_twist += twist.angular.z
+        self.particle_filter.actionUpdate(twist.linear.x, twist.linear.y, twist.angular.z)
         return
 
     def poseEstimationUpdate(self):
-        self.particle_filter.actionUpdate([self.x_twist, self.y_twist, self.yaw_twist])
-        self.x_twist = 0
-        self.y_twist = 0
-        self.yaw_twist = 0
-
         self.particle_filter.measurementUpdate(self.mt)
         self.particle_filter.particleUpdate()
         x, y, yaw = self.particle_filter.estimate()
@@ -578,7 +593,6 @@ class Robot(object):
     def pubPose(self, event):
         self.pose_pub.publish(self.pose_msg)
         return
-
 
     def __str__(self):
         return "x {}, y {}, yaw {} ".format(self.x, self.y, self.yaw)
@@ -747,6 +761,33 @@ def plotPts(pts, fig, ax):
         ax.plot(pt[0], pt[1], 'ro')
     return fig, ax
 
+class FakeParticle(object):
+    def __init__(self, x, y, yaw):
+        self.x = x
+        self.y = y
+        self.yaw = yaw
+
+class ParticleSet(object):
+    def __init__(self, file_path, steps, particles, map):
+        self.map = map
+        with open(file_path) as file:
+            data = json.load(file)
+            for i in range(steps):
+                self.p = []
+                for j,p in enumerate(data[str(i)]):
+                    vec = p[str(j)]
+                    self.p.append(FakeParticle(vec[0], vec[1], vec[2]))
+                self.plotParticles()
+
+    def plotParticles(self):
+        fig, ax = plt.subplots()
+        fig, ax = self.map.plotMap(fig, ax)
+        for p in self.p:
+            ax.scatter(p.x, p.y, c='b')
+            #ax.quiver(p.x, p.y, 1, 1, angles=np.rad2deg(p.yaw), scale=1/5, scale_units="dots",
+            #units="dots", color="y", pivot="mid", width=1.25, headwidth=2, headlength=0.5)
+        plt.show()
+
 def main():
     r = Robot(WORLD_MAP)
     r.setPose(-.5, .5, 0)
@@ -800,20 +841,16 @@ def main2():
     rospack = rospkg.RosPack()
     path = rospack.get_path('milestone2')
     map = Map(path + "/maps/rss_offset.json")
-    r = Robot(map, 0, 0, 0, 8)
+    r = Robot(map, 0.561945, 0.509381, 0.039069, 8)
 
-    #while True:
-
-        # increment move
-
-        # pose poseEstimation
-
-        # check objective
-
-        # sleep for rate
+def main3():
+    rospack = rospkg.RosPack()
+    path = rospack.get_path('milestone2')
+    map = Map(path + "/maps/rss_offset.json")
+    ps = ParticleSet("test.json", 50, 50, map)
 
 if __name__ == "__main__":
-    main2()
+    main3()
     #fig, ax = plt.subplots()
     #fig, ax = WORLD_MAP.plotMap(fig, ax)
     #seg = Segment(np.array([0, 0]), np.array([5, 5]))
