@@ -186,9 +186,9 @@ class Particle:
         self.yaw = yaw + np.random.rand()*yaw_pert
 
         # TODO: THIS IS TEMPORARY, NEED TO BE REMOVED AFTER TESTING
-        self.x = np.random.rand()*4.1
-        self.y = np.random.rand()*3.05
-        self.yaw = np.random.uniform(-1, 1) * np.pi
+        #self.x = np.random.rand()*4.1
+        #self.y = np.random.rand()*3.05
+        #self.yaw = np.random.uniform(-1, 1) * np.pi
 
         # Noise for sensing and moving
         self.move_noise = 0
@@ -261,9 +261,9 @@ class Particle:
         -------
             None
         """
-        self.x += x + np.random.rand() * self.move_noise
-        self.y += y + np.random.rand() * self.move_noise
-        self.yaw += yaw + np.random.rand() * self.turn_noise
+        self.x += x + np.random.uniform(-1, 1) * self.move_noise
+        self.y += y + np.random.uniform(-1, 1) * self.move_noise
+        self.yaw += yaw + np.random.uniform(-1, 1) * self.turn_noise
         return
 
 class ParticleFilter(object):
@@ -286,12 +286,17 @@ class ParticleFilter(object):
         self.yaw_est = yaw
 
         for _ in range(nb_p):
-            p = Particle(map, 0, 0, 0)
+            p = Particle(map, x, y, yaw)
             # TODO estimate the std for the different operations
-            p.setNoise(0.1, 0.1, 0.5)
+            p.setNoise(0.01, 0.01, 0.05)
             self.particles.append(p)
 
-    def actionUpdate(self, action):
+        ### DATA SAVE FOR VISUALISATION ###
+        self.dict = {}
+        self.i = 0
+        self.MAX = 50
+
+    def actionUpdate(self, x, y, yaw):
         """
         Update the particles position after a new transition operation.
         input:
@@ -300,7 +305,7 @@ class ParticleFilter(object):
             changed when integration with ROS.
         """
         for p in self.particles:
-            p.move(action[0], action[1], action[2])
+            p.move(x, y, yaw)
 
     def measurementUpdate(self, mt):
         """
@@ -330,6 +335,7 @@ class ParticleFilter(object):
         -------
             None
         """
+        # Resample TODO implement
         N = len(self.particles)
         beta=0
         j=0
@@ -343,7 +349,7 @@ class ParticleFilter(object):
             selectedParticle = copy(self.particles[j])
             p_temp.append(selectedParticle) # if beta<w[index], this indexed particle is selected
         self.particles = p_temp
-   
+
     def estimate(self):
         x = 0
         y = 0
@@ -353,7 +359,7 @@ class ParticleFilter(object):
             y += self.w[i]*p.y
             yaw += self.w[i]*p.yaw
         return x, y, yaw
-
+        
 class Robot(object):
     """
     Robot class used to represent particles and simulate the robot to
@@ -411,7 +417,7 @@ class Robot(object):
 
         # add the received position increment to the particles
         twist = msg.twist.twist
-        self.particle_filter.actionUpdate([twist.linear.x, twist.linear.y, twist.angular.z])
+        self.particle_filter.actionUpdate(twist.linear.x, twist.linear.y, twist.angular.z)
         return
 
     def poseEstimationUpdate(self, measurements):
