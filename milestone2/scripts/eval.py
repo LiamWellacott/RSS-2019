@@ -54,7 +54,7 @@ class ParticleSet(object):
                     for p in particles:
                         x += p.x
                         y += p.y
-                        y += p.yaw
+                        yaw += p.yaw
                     x_e = x/len(particles)
                     y_e = y/len(particles)
                     yaw_e = yaw/len(particles)
