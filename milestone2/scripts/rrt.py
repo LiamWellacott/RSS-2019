@@ -9,13 +9,57 @@ from copy import copy as copy
 
 from utile import Map
 
-RADIUS_OBSTACLE = 0.1
-RADIUS_TARGET = .2
+from Queue import PriorityQueue
+
+RADIUS_OBSTACLE = 0.05
+RADIUS_TARGET = .08
+PLOT_RADIUS = .05
 RRT_EXTEND_DIST = .20 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 20
 SMOOTHING_STEP = 0.1
 
 np.random.seed(0)
+
+class Node(object):
+    def __init__(self, parent, position, id):
+        self.parent = parent
+        self.position = position
+        self.id = id
+
+        self.g = 0
+        self.h = 0
+        self.f = 0
+
+    def __eq__(self, node):
+        return self.position == node.position
+
+    def __lt__(self, node):
+        return self.f < node.f
+
+    def __le__(self, node):
+        return self.f <= node.f
+
+    def __ne__(self, node):
+        return self.position != node.position
+
+    def __ge__(self, node):
+        return self.f >= node.f
+
+    def __gt__(self, node):
+        return self.f > node.f
+
+    def cost(self, position):
+        """Compute the cost to get from the node to
+        a given position
+        input:
+        ------
+            position: the position to compute the cost to
+        output:
+        -------
+            the L2 norm cost from self to position
+        """
+        return np.sqrt(np.power(self.position[0] - position[0], 2) + \
+               np.power(self.position[1] - position[1], 2))
 
 class RRT(object):
 
@@ -25,6 +69,7 @@ class RRT(object):
         self.graph = {}
         self.pose = {}
         self.last_index = 0
+        self.heurisitc = self.l2heurisitc
 
     def getPath(self, q_init, goal):
         # TODO: should be extended to desired pose using some kind of
@@ -40,9 +85,10 @@ class RRT(object):
         #initialize the graph
         if not self.graph:
             self._updateGraph([], q_init)
-        #if not self.goalInGraph(goal):
-        self.extendGraph(goal)
-        #path = self.astar(q_init, goal)
+        if not self.goalInGraph(goal):
+            self.extendGraph(goal)
+        path = self.astar(q_init, goal)
+        return path
 
     def _updateGraph(self, entry, pose):
         self.last_index += 1
@@ -83,6 +129,17 @@ class RRT(object):
         -------
             A sampled point on the map"""
         return self.map.samplePoint()
+
+    def goalInGraph(self, goal):
+        dist_min = float('inf')
+        for key in self.graph:
+            q = self.pose[key]
+            dist = np.sqrt(np.power(goal[0] - q[0], 2) + np.power(goal[1] - q[1], 2))
+            if dist < dist_min:
+                dist_min = dist;
+            if dist_min < RADIUS_TARGET:
+                return True
+        return False
 
     def findQnear(self, q_rand):
         """finds the closest point in the graph given a randomly sampled point
@@ -135,6 +192,7 @@ class RRT(object):
             None
         """
         is_reached = False
+        i = 0
         while not is_reached:
 
             # Sample a new point
@@ -142,8 +200,6 @@ class RRT(object):
 
             # Find the index of the nearest node (q_near) in the graph
             id = self.findQnear(q_sample)
-            print(self.graph)
-            print(self.pose)
             q_near = self.pose[id]
             # Find the closest feasible point to the randomly sampled point (q_new)
             q_new = self.findQnew(q_sample, q_near)
@@ -153,11 +209,11 @@ class RRT(object):
                 self._updateGraph([id], q_new)
                 self.graph[id].append(self.last_index)
                 # Check if the goal has been reached
-                if np.sqrt(np.power(q_new[0]-goal[0], 2) + np.power(q_new[1]-goal[1], 2)) < RADIUS_TARGET:
+                if np.sqrt(np.power(q_new[0]-goal[0], 2) + np.power(q_new[1]-goal[1], 2)) <= RADIUS_TARGET:
                     is_reached = True
         return
 
-    def astar(self, start=None, goal=None):
+    def astar(self, start, goal):
         """ Astar implementation. This astar function uses the graph to
         find a path between init and goal. Need to make sure the goal is in
         the path.
@@ -166,24 +222,70 @@ class RRT(object):
             start: the starting point
             goal: the goal point
         """
-        return
+        path_x = []
+        path_y = []
+        id_start = self.findQnear(start)
+        id_goal = self.findQnear(goal)
+        fringe = PriorityQueue()
+        visited = {}
+        #visited[id_start] = 0
+        fringe.put(Node(None, self.pose[id_start], id_start))
+        end_node = Node(None, self.pose[id_goal], id_goal)
 
-    def plotGraph(self, start=None, goal=None):
+        # keeps the current estimated cost of one node
+        g_cost = {}
+        g_cost[id_start] = 0
+
+        while not fringe.empty():
+            # Retrives the top element of the PriorityQueue. I.E
+            # the node with the smallest cost.
+            current = fringe.get()
+            visited[current.id] = current
+
+            # Found the goal
+            if current == end_node:
+                path = []
+                prev = current
+                while prev is not None:
+                    path.append(prev.position)
+                    prev = prev.parent
+                return path[::-1]
+
+            # List all the childrens
+            for child_id in self.graph[current.id]:
+                child = Node(current, self.pose[child_id], child_id)
+                if child in visited:
+                    continue
+
+                #compute values for A*
+                child.g = current.g + child.cost(current.position)
+                child.h = self.heurisitc(child.position, end_node.position)
+                child.f = child.g + child.h
+
+
+                if child.id not in g_cost.keys() or child.g < g_cost[child.id]:
+                    g_cost[child.id] = child.g
+                    fringe.put(child)
+
+    def smoothingPath(self, path):
+        
+        return new_path
+
+    def plotGraph(self, start=None, goal=None, path=None):
         fig, ax = plt.subplots()
         fig, ax = self.map.plotMap(fig, ax)
 
         if start is not None:
             #Draw start and target points
-            circle_start_1 = plt.Circle(start, RADIUS_TARGET, color='g', alpha=0.5)
+            circle_start_1 = plt.Circle(start, PLOT_RADIUS, color='g', alpha=0.5)
             circle_start_2 = plt.Circle(start, RADIUS_OBSTACLE, color='g')
             plt.gcf().gca().add_artist(circle_start_1)
             plt.gcf().gca().add_artist(circle_start_2)
         if goal is not None:
-            circle_target_1 = plt.Circle(goal, RADIUS_TARGET, color='r', alpha=0.5)
-            circle_target_2 = plt.Circle(goal, RADIUS_OBSTACLE, color='r')
+            circle_target_1 = plt.Circle(goal, PLOT_RADIUS, color='b', alpha=0.5)
+            circle_target_2 = plt.Circle(goal, RADIUS_OBSTACLE, color='b')
             plt.gcf().gca().add_artist(circle_target_1)
             plt.gcf().gca().add_artist(circle_target_2)
-
 
         #Draw tree
         for key in self.graph:
@@ -191,24 +293,38 @@ class RRT(object):
             for edge in self.graph[key]:
                 pose_edge = self.pose[edge]
                 plt.plot([pose_edge[0], pose[0]], [pose_edge[1], pose[1]], color='y', marker='.')
+
+        if path is not None:
+            for node in path:
+                circle_target_1 = plt.Circle(node, PLOT_RADIUS, color='r', alpha=0.5)
+                circle_target_2 = plt.Circle(node, RADIUS_OBSTACLE, color='r')
+                plt.gcf().gca().add_artist(circle_target_1)
+                plt.gcf().gca().add_artist(circle_target_2)
+                #plt.scatter(node[0], node[1], color='r', marker='.')
         plt.axis('scaled')
         plt.grid()
         plt.show()
 
+    def l2heurisitc(self, node, goal):
+        return np.sqrt(np.power(node[0] - goal[0], 2) + np.power(node[1] - goal[1], 2))
 
 def main():
     map = Map("maps/rss_offset.json")
     planner = RRT(map)
     start = [.5, .5]
     goal = [3.50, 2.5]
-    planner.getPath(start, goal)
+    path = planner.getPath(start, goal)
+    planner.plotGraph(start=start, goal=goal, path=path)
+    start = [.4, 3.0]
+    goal = [2.5, 0.5]
+    path = planner.getPath(start, goal)
+    planner.plotGraph(start=start, goal=goal, path=path)
     #sample = planner.samplePoint()
     #sample2 = planner.samplePoint()
     #planner.graph.update({1: [2]})
     #planner.graph.update({2: [1]})
     #planner.pose.update({1: sample})
     #planner.pose.update({2: sample2})
-    planner.plotGraph()
 
 if __name__ == '__main__':
     main()
