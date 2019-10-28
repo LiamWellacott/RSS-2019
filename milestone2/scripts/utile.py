@@ -34,9 +34,18 @@ class Segment(object):
         tmp = self.perp[0]
         self.perp[0] = -self.perp[1]
         self.perp[1] = tmp
+        # normailze perp vector
+        self.perp /= np.linalg.norm(self.perp)
+
+        #normalized orientation vector
+        self.n_vec = np.copy(self.vec)
+        self.n_vec /= np.linalg.norm(self.n_vec)
 
     def __str__(self):
         return self._toArray().__str__()
+
+    def __eq__(self, segment):
+        return self.p1 == self.p2
 
     def _toArray(self):
         return np.array([self.p1, self.p2])
@@ -44,7 +53,7 @@ class Segment(object):
     def plotSeg(self, fig, ax):
         lines = [self._toArray()]
         c = [(1,0,0,1)]
-        lc = mc.LineCollection(lines, linestyles='dashed', colors=c, linewidth=2)
+        lc = mc.LineCollection(lines, colors=c, linewidth=2)
         ax.add_collection(lc)
         ax.autoscale()
         ax.margins(0.1)
@@ -55,6 +64,7 @@ class Map(object):
     LENGTH = 5.32 # sqrt(4.25**2 + 3.20**2)
     X_LEN = 4.1
     Y_LEN = 3.05
+    OFFSET = 0.22 # operational radius
     """
     Class representing the map. It has a set of segments.
     """
@@ -189,6 +199,7 @@ class Map(object):
             #fig, ax = seg.plotPerp(fig, ax)
         lc = mc.LineCollection(lines, linewidth=2)
         ax.add_collection(lc)
+
         ax.autoscale()
         ax.margins(0.1)
         return fig, ax
@@ -214,7 +225,7 @@ class Map(object):
             return True
         return False
 
-    def intersect(self, segment):
+    def intersect(self, segment, offset=0):
         """Returns true if a segment instersects a wall
         input:
         ------
@@ -224,13 +235,78 @@ class Map(object):
             True if the segments intersects a wall, False otherwise
         """
         seg = Segment(np.array(segment[0]), np.array(segment[1]))
+        seg1 = Segment(seg.p1+seg.perp*offset, seg.p2+seg.perp*offset)
+        seg2 = Segment(seg.p1-seg.perp*offset, seg.p2-seg.perp*offset)
+
+        #fig, ax = plt.subplots()
+        #fig, ax = self.plotMap(fig, ax)
+        #fig, ax = seg1.plotSeg(fig, ax)
+        #fig, ax = seg2.plotSeg(fig, ax)
+        #fig, ax = seg.plotSeg(fig, ax)
+        #plt.plot([segment[0][0], segment[1][0]], [segment[0][1], segment[1][1]], color='y', marker='.')
+        #plt.quiver(seg.p1[0], seg.p1[1], seg.perp[0], seg.perp[1])
+        #plt.show()
+
         for wall in self.segments:
-            t, s = self._intersection(wall, seg)
+            t, s = self._intersection(wall, seg1)
             if 0.0 < t and t < 1.0 and 0.0 < s and s < 1.0:
                 return True
+            if offset > 0:
+                t, s = self._intersection(wall, seg2)
+                if 0.0 < t and t < 1.0 and 0.0 < s and s < 1.0:
+                    return True
         return False
 
-    def samplePoint(self):
+    def intersectCircle(self, point, radius):
+        """ Computes the intersection of a circle with the walls of the map
+        https://stackoverflow.com/questions/1073336/circle-line-segment-collision-detection-algorithm
+        fig, ax = plt.subplots()
+        fig, ax = self.plotMap(fig, ax)
+        circle = plt.Circle((point[0], point[1]), radius, color='r', alpha=0.1)
+        plt.gcf().gca().add_artist(circle)
+        plt.show()
+        """
+
+        for wall in self.segments:
+            d = wall.vec
+            f = wall.p1 - point
+            a = np.dot(d, d)
+            b = 2*np.dot(d, f)
+            c = np.dot(f, f) - radius*radius
+
+            delta = b**2 - 4*a*c
+            if delta < 0:
+                continue
+            delta = np.sqrt(delta)
+            t1 = (-b + delta)/(2*a)
+            t2 = (-b - delta)/(2*a)
+
+            '''
+            if (t1 >= 0 and t1 <= 1) or (t2 >= 0 and t2 <= 1):
+                p1 = wall.p1 + t1*wall.vec
+                p2 = wall.p1 + t2*wall.vec
+
+                fig, ax = plt.subplots()
+                fig, ax = self.plotMap(fig, ax)
+                circle = plt.Circle((point[0], point[1]), radius, color='r', alpha=0.1)
+                plt.gcf().gca().add_artist(circle)
+                if t1 >= 0 and t1 <= 1:
+                    circle = plt.Circle((p1[0], p1[1]), 0.1, color='g', alpha=0.5)
+                    plt.gcf().gca().add_artist(circle)
+                if t2 >= 0 and t2 <= 1:
+                    circle = plt.Circle((p2[0], p2[1]), 0.1, color='b', alpha=0.5)
+                    plt.gcf().gca().add_artist(circle)
+                fig, ax = wall.plotSeg(fig, ax)
+                plt.show()
+                '''
+            if t1 >= 0 and t1 <= 1:
+                return True
+            if t2 >= 0 and t2 <= 1:
+                return True
+
+        return False
+
+    def samplePoint(self, radius):
         """ Samples a point on the map that is not inside an obstacle
         input:
         ------
@@ -245,9 +321,11 @@ class Map(object):
             sample = []
             sample.append(np.random.rand()*self.X_LEN)
             sample.append(np.random.rand()*self.Y_LEN)
-            if not self.inObstacle(sample):
+            if not ( self.inObstacle(sample) or self.intersectCircle(sample, radius) ):
                 valid = True
+                #if self.intersectCircle(sample, radius):
         return sample
+
 def cross(v, w):
     """
     Cross product for 2D vector. This function asssumes that the given vector is in 2D.
@@ -260,3 +338,15 @@ def cross(v, w):
     - cross product (@f$(v_x * w_y - v_y * w_x)@f$)
     """
     return v[0]*w[1] - v[1]*w[0]
+
+def dot(v, w):
+    return v[0]*w[0] + v[1]*w[1]
+
+def main():
+    map = Map("maps/rss_offset.json")
+    fig, ax = plt.subplots()
+    map.plotMap(fig, ax)
+    plt.show()
+
+if __name__ == "__main__":
+    main()

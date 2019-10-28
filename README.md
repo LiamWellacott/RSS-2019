@@ -24,4 +24,5 @@ Right now only a run
  - [ ] implement various resampling algorithms and evaluate their performances.
  - [ ] comment the files:
       * [x] particle.py
- - [ ] need to find a probability that takes the direction into account
+ - [ ] need to find a probability that takes the direction into account.
+ - [ ] clean up rrt.py and utile.py.
