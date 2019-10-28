@@ -20,10 +20,6 @@ RRT_EXTEND_DIST = .20 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
-# used for plotting
-RADIUS_OBSTACLE = 0.05
-PLOT_RADIUS = .05
-
 # fixed for repeatability
 np.random.seed(0)
 
@@ -211,7 +207,7 @@ class RRT(object):
         while not is_reached:
 
             # Sample a new point
-            q_sample = self.map.samplePoint()
+            q_sample = self.samplePoint()
 
             # Find the index of the nearest node (q_near) in the graph
             id = self.findQnear(q_sample)
@@ -230,7 +226,7 @@ class RRT(object):
             i+=1
             '''
             # Check if the edge is collision free
-            if not self.map.intersect([q_near, q_new]):
+            if not self.checkSegmentCollision(q_near, q_new):
                 self._updateGraph([id], q_new)
                 self.graph[id].append(self.last_index)
                 # Check if the goal has been reached
@@ -336,7 +332,7 @@ class RRT(object):
 
         if path is not None:
             for node in path:
-                circle_target_1 = plt.Circle(node, PLOT_RADIUS, color='r', alpha=0.5)
+                circle_target_1 = plt.Circle(node, RADIUS_OBSTACLE, color='r', alpha=0.5)
                 plt.gcf().gca().add_artist(circle_target_1)
                 #plt.scatter(node[0], node[1], color='r', marker='.')
         plt.axis('scaled')
