@@ -320,6 +320,10 @@ class Robot(object):
         self.y = y
         self.yaw = yaw
 
+        self.dict={}
+        self.values=[]
+        self.counter = 0
+
         # Initialise particle filter
         self.nb_rays = nb_rays
         self.map = map
@@ -346,7 +350,16 @@ class Robot(object):
         # add the received position increment to the particles
         vel = msg.twist.twist
         self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
+        
+        self.values.append([vel.linear.x, vel.linear.y, vel.angular.z])
+        self.dict.update({str(self.counter) : values})
+        self.counter+=1
+        self.dumpData("values.json")
         return
+
+    def dumpData(self, file_path):
+        with open(file_path, 'w') as file:
+            json.dump(self.dict, file)
 
     def poseEstimationUpdate(self, measurements):
 
