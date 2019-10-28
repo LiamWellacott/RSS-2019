@@ -39,12 +39,7 @@ NOISE_MOVE = 0.05
 NOISE_TURN = 0.05
 NOISE_SENSE = 0.5
 
-
 MAX_VAL = 150
-
-
-
-
 
 class Particle(object):
     """

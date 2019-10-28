@@ -20,6 +20,11 @@ RRT_EXTEND_DIST = .20 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
+# used for plotting
+RADIUS_OBSTACLE = 0.05
+PLOT_RADIUS = .05
+
+# fixed for repeatability
 np.random.seed(0)
 
 class Node(object):
@@ -84,9 +89,11 @@ class RRT(object):
             q_init: current position
             goal: targeted position
         """
-        #initialize the graph
+        # if nothing in the graph yet, initialise
         if not self.graph:
             self._updateGraph([], q_init)
+
+        # if the goal position is not in the graph, loop until route to goal exists
         if not self.goalInGraph(goal):
             self.extendGraph(goal)
         path = self.smoothingPath(self.astar(q_init, goal))
@@ -133,14 +140,17 @@ class RRT(object):
         return self.map.samplePoint(RADIUS_OBSTACLE)
 
     def goalInGraph(self, goal):
-        dist_min = float('inf')
+
+        # for each node in the graph
         for key in self.graph:
             q = self.pose[key]
+
+            # calculate distance between goal and node
             dist = np.sqrt(np.power(goal[0] - q[0], 2) + np.power(goal[1] - q[1], 2))
-            if dist < dist_min:
-                dist_min = dist;
-            if dist_min < RADIUS_TARGET:
+            if dist < RADIUS_TARGET: # less than threshold?
                 return True
+
+        # No node found within RADIUS_TARGET
         return False
 
     def findQnear(self, q_rand):
@@ -157,10 +167,13 @@ class RRT(object):
         dist_min = float('inf')
         for key in self.graph:
             q = self.pose[key]
+
             dist = np.sqrt(np.power(q_rand[0] - q[0], 2) + np.power(q_rand[1] - q[1], 2))
             if dist < dist_min:
-                dist_min = dist;
+                dist_min = dist
                 id = key
+
+        # return id of the closest node
         return id
 
     def findQnew(self, q_rand, q_near):
@@ -198,7 +211,7 @@ class RRT(object):
         while not is_reached:
 
             # Sample a new point
-            q_sample = self.samplePoint()
+            q_sample = self.map.samplePoint()
 
             # Find the index of the nearest node (q_near) in the graph
             id = self.findQnear(q_sample)
@@ -217,7 +230,7 @@ class RRT(object):
             i+=1
             '''
             # Check if the edge is collision free
-            if not self.checkSegmentCollision(q_near, q_new):
+            if not self.map.intersect([q_near, q_new]):
                 self._updateGraph([id], q_new)
                 self.graph[id].append(self.last_index)
                 # Check if the goal has been reached
@@ -274,7 +287,6 @@ class RRT(object):
                 child.g = current.g + child.cost(current.position)
                 child.h = self.heurisitc(child.position, end_node.position)
                 child.f = child.g + child.h
-
 
                 if child.id not in g_cost.keys() or child.g < g_cost[child.id]:
                     g_cost[child.id] = child.g
