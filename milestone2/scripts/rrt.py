@@ -7,15 +7,17 @@ import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 from copy import copy as copy
 
+import time
+
 from utile import Map
 
 from Queue import PriorityQueue
 
-RADIUS_OBSTACLE = 0.05
+RADIUS_OBSTACLE = 0.2
 RADIUS_TARGET = .08
 PLOT_RADIUS = .05
 RRT_EXTEND_DIST = .20 # 20 CM between two points at most
-SMOOTHING_ITERATIONS = 20
+SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
 np.random.seed(0)
@@ -87,7 +89,7 @@ class RRT(object):
             self._updateGraph([], q_init)
         if not self.goalInGraph(goal):
             self.extendGraph(goal)
-        path = self.astar(q_init, goal)
+        path = self.smoothingPath(self.astar(q_init, goal))
         return path
 
     def _updateGraph(self, entry, pose):
@@ -117,7 +119,7 @@ class RRT(object):
         output:
             boolean: True if collision is detected, False otherwise
         """
-        return self.map.intersect([p, q])
+        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE)
 
     def samplePoint(self):
         """Samples a point inside the obstacle this is a guarentie
@@ -128,7 +130,7 @@ class RRT(object):
         output:
         -------
             A sampled point on the map"""
-        return self.map.samplePoint()
+        return self.map.samplePoint(RADIUS_OBSTACLE)
 
     def goalInGraph(self, goal):
         dist_min = float('inf')
@@ -204,6 +206,16 @@ class RRT(object):
             # Find the closest feasible point to the randomly sampled point (q_new)
             q_new = self.findQnew(q_sample, q_near)
 
+            '''
+            if i < 10:
+                fig, ax = plt.subplots()
+                fig, ax = self.map.plotMap(fig, ax)
+                circle = plt.Circle((q_new[0], q_new[1]), RADIUS_OBSTACLE, color='r', alpha=0.1)
+                plt.gcf().gca().add_artist(circle)
+                self.plotGraph(start=q_near, goal=q_new, sample=q_sample)
+                plt.show()
+            i+=1
+            '''
             # Check if the edge is collision free
             if not self.checkSegmentCollision(q_near, q_new):
                 self._updateGraph([id], q_new)
@@ -211,6 +223,7 @@ class RRT(object):
                 # Check if the goal has been reached
                 if np.sqrt(np.power(q_new[0]-goal[0], 2) + np.power(q_new[1]-goal[1], 2)) <= RADIUS_TARGET:
                     is_reached = True
+
         return
 
     def astar(self, start, goal):
@@ -268,24 +281,39 @@ class RRT(object):
                     fringe.put(child)
 
     def smoothingPath(self, path):
-        
-        return new_path
+        for i in range(SMOOTHING_ITERATIONS):
+            index1 = np.random.randint(0, len(path)-1)
+            index2 = np.random.randint(0, len(path)-1)
+            if index1 != index2 and not self.checkSegmentCollision(path[index1], path[index2]):
+                if index1 < index2:
+                    index_low = index1
+                    index_up = index2
+                else:
+                    index_low = index2
+                    index_up = index1
+                middle = []
+                deltax = (path[index_up][0]-path[index_low][0])
+                deltay = (path[index_up][1]-path[index_low][1])
+                for l in np.arange(SMOOTHING_STEP, 1.0-SMOOTHING_STEP, SMOOTHING_STEP):
+                    middle += [(path[index_low][0]+l*deltax, path[index_low][1]+l*deltay)]
+                path = path[:index_low+1] + middle + path[index_up:]
+        return path
 
-    def plotGraph(self, start=None, goal=None, path=None):
+    def plotGraph(self, start=None, goal=None, sample=None, path=None):
         fig, ax = plt.subplots()
         fig, ax = self.map.plotMap(fig, ax)
 
         if start is not None:
             #Draw start and target points
             circle_start_1 = plt.Circle(start, PLOT_RADIUS, color='g', alpha=0.5)
-            circle_start_2 = plt.Circle(start, RADIUS_OBSTACLE, color='g')
             plt.gcf().gca().add_artist(circle_start_1)
-            plt.gcf().gca().add_artist(circle_start_2)
         if goal is not None:
             circle_target_1 = plt.Circle(goal, PLOT_RADIUS, color='b', alpha=0.5)
-            circle_target_2 = plt.Circle(goal, RADIUS_OBSTACLE, color='b')
             plt.gcf().gca().add_artist(circle_target_1)
-            plt.gcf().gca().add_artist(circle_target_2)
+
+        if sample is not None:
+            circle_target_1 = plt.Circle(sample, PLOT_RADIUS, color='r', alpha=0.5)
+            plt.gcf().gca().add_artist(circle_target_1)
 
         #Draw tree
         for key in self.graph:
@@ -297,9 +325,7 @@ class RRT(object):
         if path is not None:
             for node in path:
                 circle_target_1 = plt.Circle(node, PLOT_RADIUS, color='r', alpha=0.5)
-                circle_target_2 = plt.Circle(node, RADIUS_OBSTACLE, color='r')
                 plt.gcf().gca().add_artist(circle_target_1)
-                plt.gcf().gca().add_artist(circle_target_2)
                 #plt.scatter(node[0], node[1], color='r', marker='.')
         plt.axis('scaled')
         plt.grid()
@@ -308,6 +334,33 @@ class RRT(object):
     def l2heurisitc(self, node, goal):
         return np.sqrt(np.power(node[0] - goal[0], 2) + np.power(node[1] - goal[1], 2))
 
+def performance():
+    map = Map("maps/rss_offset.json")
+
+    iter = 30
+    rrt_only = np.zeros((iter,))
+    rrt_astar = np.zeros((iter,))
+    x = np.arange(iter)
+    planner_astar = RRT(map)
+    for i in x:
+        # Sample points
+        start = map.samplePoint(RADIUS_OBSTACLE)
+        goal = map.samplePoint(RADIUS_OBSTACLE)
+
+        start_rrt = time.time()
+        planner = RRT(map)
+        path = planner.getPath(start, goal)
+        rrt_only[i] = time.time() - start_rrt
+
+        start_astar = time.time()
+        path = planner_astar.getPath(start, goal)
+        rrt_astar[i] = time.time() - start_astar
+        print(i)
+
+    plt.plot(x, rrt_only, 'r')
+    plt.plot(x, rrt_astar, 'b')
+    plt.show()
+
 def main():
     map = Map("maps/rss_offset.json")
     planner = RRT(map)
@@ -315,16 +368,11 @@ def main():
     goal = [3.50, 2.5]
     path = planner.getPath(start, goal)
     planner.plotGraph(start=start, goal=goal, path=path)
-    start = [.4, 3.0]
+
+    start = [.4, 2.8]
     goal = [2.5, 0.5]
     path = planner.getPath(start, goal)
     planner.plotGraph(start=start, goal=goal, path=path)
-    #sample = planner.samplePoint()
-    #sample2 = planner.samplePoint()
-    #planner.graph.update({1: [2]})
-    #planner.graph.update({2: [1]})
-    #planner.pose.update({1: sample})
-    #planner.pose.update({2: sample2})
 
 if __name__ == '__main__':
     main()
