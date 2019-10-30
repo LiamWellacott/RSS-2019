@@ -44,8 +44,8 @@ class Segment(object):
     def __str__(self):
         return self._toArray().__str__()
 
-    def __eq__(self, segment):
-        return self.p1 == self.p2
+    def __eq__(self, seg):
+        return self.p1 == seg.p1 and self.p2 == seg.p2
 
     def _toArray(self):
         return np.array([self.p1, self.p2])
