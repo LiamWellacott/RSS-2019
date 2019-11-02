@@ -92,7 +92,8 @@ class RRT(object):
         # if the goal position is not in the graph, loop until route to goal exists
         if not self.goalInGraph(goal):
             self.extendGraph(goal)
-        path = self.smoothingPath(self.astar(q_init, goal))
+        path = self.astar(q_init, goal)
+        path = self.smoothingPath(path)
         return path
 
     def _updateGraph(self, entry, pose):
@@ -305,7 +306,53 @@ class RRT(object):
                 for l in np.arange(SMOOTHING_STEP, 1.0-SMOOTHING_STEP, SMOOTHING_STEP):
                     middle += [(path[index_low][0]+l*deltax, path[index_low][1]+l*deltay)]
                 path = path[:index_low+1] + middle + path[index_up:]
-        return path
+        # Second smoothing, consist in having regularly spaced points and curving corners
+        # TODO: define those variables as class constants.
+        path = np.array(path)
+        new_path = np.copy(path[0])
+
+        min_step = 0.10
+
+        for i in range(len(path)-1):
+
+            diff = path[i+1] - path[i]
+
+            dist = np.linalg.norm(path[i+1]-path[i])
+
+            j = min_step
+            points = []
+            while j < dist:
+                new_point = path[i] + j/dist*diff
+                points.append(new_point)
+                j += min_step
+
+            if points:
+                points = np.array(points)
+                new_path = np.vstack((new_path, points))
+
+            new_path = np.vstack((new_path, path[i+1]))
+
+        smooth_path = np.copy(new_path)
+
+        weight_data = 0.5
+        weight_smooth = 0.5
+        tolerance = 0.5
+        change = tolerance
+        while change >= tolerance:
+            change = 0
+            for i in range(1, len(new_path)-1):
+                for j in range(len(new_path[i])):
+                    aux = smooth_path[i][j]
+                    smooth_path[i][j] += weight_data * (new_path[i][j] - smooth_path[i][j]) + \
+                        weight_smooth * (smooth_path[i-1][j] + smooth_path[i+1][j] - 2*smooth_path[i][j])
+
+        #fig, ax = plt.subplots(2)
+        #ax[0].plot(smooth_path[:,0], smooth_path[:,1], 'r')
+        #ax[1].plot(smooth_path[:,0], smooth_path[:,1], 'r')
+        #ax[1].plot(new_path[:,0], new_path[:,1], 'y')
+        #plt.show()
+        return smooth_path
+
 
     def plotGraph(self, start=None, goal=None, sample=None, path=None):
         fig, ax = plt.subplots()
