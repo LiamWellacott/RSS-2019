@@ -15,21 +15,28 @@ from rrt import RRT
 
 
 class robot(object):
-    def __init__(self, x, y, yaw, map):
+    def __init__(self, x, y, yaw, map, path):
         self.yaw = yaw
         self.x = x
         self.y = y
         self.pose = np.array([x, y])
-        self.look = 0.2
+        self.look = 0.1
         self.map = map
+        self.path = path
 
         self.fig, self.ax = plt.subplots(2,2)
         plt.show(block=False)
 
     def move(self, v, gamma):
         dt = 0.05
-        r = 1/gamma
-        w = v/r
+        if np.abs(gamma) < 1e-6:
+            w = 0
+        else:
+            r = 1/gamma
+            if np.abs(v) < 1e-2:
+                w = gamma
+            else:
+                w = v/r
         if np.abs(w) > 1e-6:
             # Compute the rotational radius
             r = v/w
@@ -50,9 +57,18 @@ class robot(object):
         return i
 
     def lookahead(self):
-        for i, p in enumerate(reversed(self.path[:-1])):
-            i_ = len(self.path) - 2 - i
-            d = self.path[i_+1] - p
+        left_path = self.path[self.closest():]
+
+        d = np.linalg.norm(self.pose - self.path[-1])
+        if d < self.look:
+            return self.path[-1]
+
+        for i, p in enumerate(reversed(left_path[:-1])):
+            # i_ goes in the reverse order than i. i.e. if len(path) = 20 then
+            # i = 0 and i_ = 18
+            i_ = len(left_path) - 2 - i
+
+            d = left_path[i_+1] - p
             f = p - self.pose
 
             a = np.dot(d, d)
@@ -73,23 +89,29 @@ class robot(object):
         return self.path[self.closest()]
 
     def mv2pt(self, pt):
-        kv = 0.5
+
+        kv = 1
+        kd = 0.05
         kh = 5
+
         vm = 0.26
         wm = 0.20
+
         x = []
         y = []
         vp = []
         wp = []
-        dist = np.sqrt((pt[0] - self.x)**2 + (pt[1] - self.y)**2)
-        v = kv*dist
-        v = min(v, vm)
+
         dx = pt[0] - self.x
         dy = pt[1] - self.y
         teta = math.atan2(dy, dx)
         a = (teta - self.yaw)
         a = ((a + np.pi) % (2*np.pi)) - np.pi
         gamma = kh*a
+
+        dist = np.sqrt((pt[0] - self.x)**2 + (pt[1] - self.y)**2)
+        v = kv*dist - kd*a
+        v = max(min(v, vm), 0)
         self.move(v, gamma)
         x.append(self.x)
         y.append(self.y)
@@ -97,31 +119,38 @@ class robot(object):
         wp.append(gamma)
         return x, y, vp, wp
 
-    def followPath(self, path):
-        self.path = path
+    def followPath(self):
         pt = self.lookahead()
         x = []
         y = []
         v = []
         w = []
+        yaw = []
         i = 10
-        while self.closest() != len(self.path) - 1:
+
+        d_ = np.linalg.norm(self.pose - self.path[-1])
+        dist = []
+        while d_ > 1e-2:
             a, b, c, d = self.mv2pt(pt)
             pt = self.lookahead()
             x += a
             y += b
             v += c
             w += d
+            yaw.append(self.yaw)
+            d_ = np.linalg.norm(self.pose - self.path[-1])
+            dist.append(d_)
             if i % 10 == 0:
-                self.plotTraj(x, y, v, w, pt)
+                self.plotTraj(x, y, yaw, v, w, dist, pt)
             i += 1
-        return x, y, v, w
+        return x, y, v, w, dist
 
-    def plotTraj(self, x, y, v, w, goal):
+    def plotTraj(self, x, y, yaw, v, w, d, goal):
 
         self.ax[0][0].clear()
         self.ax[1][0].clear()
         self.ax[1][1].clear()
+        self.ax[0][1].clear()
 
         self.fig, self.ax[0][0] = self.map.plotMap(self.fig, self.ax[0][0])
         self.ax[0][0].plot(self.path[:,0], self.path[:,1], 'r')
@@ -129,6 +158,7 @@ class robot(object):
         self.ax[0][0].scatter(goal[0], goal[1])
         self.ax[1][0].plot(range(len(v)), v)
         self.ax[1][1].plot(range(len(w)), w)
+        self.ax[0][1].plot(range(len(yaw)), yaw)
 
         plt.draw()
         plt.pause(0.001)
@@ -188,9 +218,20 @@ def main2():
     planner = RRT(map)
     start = [.5, .5]
     goal = [3.5, 2.5]
+    #goal = [.5, .6]
     path = np.array(planner.getPath(start, goal))
-    r = robot(start[0], start[1], 0, map)
-    x, y, v, w = r.followPath(path)
+    #path = np.array([[.5, .5], [.7, .5], [1., .5]])
+    r = robot(start[0], start[1], 0, map, path)
+    #r.lookahead()
+    x, y, v, w, d = r.followPath()
+
+    start = [.4, 2.8]
+    goal = [2.5, 0.5]
+    path = np.array(planner.getPath(start, goal))
+    r = robot(start[0], start[1], 0, map, path)
+    #r.lookahead()
+    x, y, v, w, d = r.followPath()
+    #planner.plotGraph(start=start, goal=goal, path=path)
 
 
 if __name__ == "__main__":
