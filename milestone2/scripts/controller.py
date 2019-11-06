@@ -14,13 +14,11 @@ from utile import Map
 from rrt import RRT
 
 
-class robot(object):
+class Controller(object):
     def __init__(self, x, y, yaw, map, path):
         self.yaw = yaw
-        self.x = x
-        self.y = y
         self.pose = np.array([x, y])
-        self.look = 0.1
+        self.look = 0.4
         self.map = map
         self.path = path
 
@@ -41,15 +39,14 @@ class robot(object):
             # Compute the rotational radius
             r = v/w
             # Instantaneous center of curvature
-            icc = [self.x - r*np.sin(self.yaw), self.y + r*np.cos(self.yaw)]
+            icc = [self.pose[0] - r*np.sin(self.yaw), self.pose[1] + r*np.cos(self.yaw)]
             wdt = w*dt
-            self.x = (self.x - icc[0])*np.cos(wdt) - (self.y - icc[1])*np.sin(wdt) + icc[0]
-            self.y = (self.x - icc[0])*np.sin(wdt) + (self.y - icc[1])*np.cos(wdt) + icc[1]
+            self.pose[0] = (self.pose[0] - icc[0])*np.cos(wdt) - (self.pose[1] - icc[1])*np.sin(wdt) + icc[0]
+            self.pose[1] = (self.pose[0] - icc[0])*np.sin(wdt) + (self.pose[1] - icc[1])*np.cos(wdt) + icc[1]
             self.yaw = self.yaw + wdt
         else:
-            self.x += v*np.cos(self.yaw)*dt
-            self.y += v*np.sin(self.yaw)*dt
-        self.pose = np.array([self.x, self.y])
+            self.pose[0] += v*np.cos(self.yaw)*dt
+            self.pose[1] += v*np.sin(self.yaw)*dt
 
     def closest(self):
         dist = np.linalg.norm(self.path - self.pose, axis=1)
@@ -91,7 +88,7 @@ class robot(object):
     def mv2pt(self, pt):
 
         kv = 1
-        kd = 0.05
+        kd = 0
         kh = 5
 
         vm = 0.26
@@ -102,19 +99,19 @@ class robot(object):
         vp = []
         wp = []
 
-        dx = pt[0] - self.x
-        dy = pt[1] - self.y
+        dx = pt[0] - self.pose[0]
+        dy = pt[1] - self.pose[1]
         teta = math.atan2(dy, dx)
         a = (teta - self.yaw)
         a = ((a + np.pi) % (2*np.pi)) - np.pi
         gamma = kh*a
 
-        dist = np.sqrt((pt[0] - self.x)**2 + (pt[1] - self.y)**2)
+        dist = np.sqrt((pt[0] - self.pose[0])**2 + (pt[1] - self.pose[1])**2)
         v = kv*dist - kd*a
         v = max(min(v, vm), 0)
         self.move(v, gamma)
-        x.append(self.x)
-        y.append(self.y)
+        x.append(self.pose[0])
+        y.append(self.pose[1])
         vp.append(v)
         wp.append(gamma)
         return x, y, vp, wp
@@ -130,7 +127,7 @@ class robot(object):
 
         d_ = np.linalg.norm(self.pose - self.path[-1])
         dist = []
-        while d_ > 1e-2:
+        while d_ > 1e-1:
             a, b, c, d = self.mv2pt(pt)
             pt = self.lookahead()
             x += a
@@ -216,19 +213,19 @@ def main():
 def main2():
     map = Map("maps/rss_offset.json")
     planner = RRT(map)
-    start = [.5, .5]
-    goal = [3.5, 2.5]
+    start = [2.0, 1.75]
+    goal = [2.0, 2.6]
     #goal = [.5, .6]
     path = np.array(planner.getPath(start, goal))
     #path = np.array([[.5, .5], [.7, .5], [1., .5]])
-    r = robot(start[0], start[1], 0, map, path)
+    r = Controller(start[0], start[1], 0, map, path)
     #r.lookahead()
     x, y, v, w, d = r.followPath()
 
     start = [.4, 2.8]
     goal = [2.5, 0.5]
     path = np.array(planner.getPath(start, goal))
-    r = robot(start[0], start[1], 0, map, path)
+    r = Controller(start[0], start[1], 0, map, path)
     #r.lookahead()
     x, y, v, w, d = r.followPath()
     #planner.plotGraph(start=start, goal=goal, path=path)
