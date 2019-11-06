@@ -45,7 +45,7 @@ class robot(object):
         self.pose = np.array([self.x, self.y])
 
     def closest(self):
-        dist = np.linalg.norm(self.path - self.pose)
+        dist = np.linalg.norm(self.path - self.pose, axis=1)
         i = np.argmin(dist)
         return i
 
@@ -72,7 +72,7 @@ class robot(object):
 
         return self.path[self.closest()]
 
-    def mv2pt2(self, pt):
+    def mv2pt(self, pt):
         kv = 0.5
         kh = 5
         vm = 0.26
@@ -97,34 +97,6 @@ class robot(object):
         wp.append(gamma)
         return x, y, vp, wp
 
-    def mv2pt(self, pt):
-        kv = 0.5
-        kh = 5
-        vm = 0.26
-        wm = 0.20
-        x = [self.x]
-        y = [self.y]
-        vp = [0]
-        wp = [0]
-        for i in range(1000):
-            dist = np.sqrt((pt[0] - self.x)**2 + (pt[1] - self.y)**2)
-            if dist < 0.05:
-                break
-            v = kv*dist
-            v = min(v, vm)
-            dx = pt[0] - self.x
-            dy = pt[1] - self.y
-            teta = math.atan2(dy, dx)
-            a = (teta - self.yaw)
-            a = ((a + np.pi) % (2*np.pi)) - np.pi
-            gamma = kh*a
-            self.move(v, gamma)
-            x.append(self.x)
-            y.append(self.y)
-            vp.append(v)
-            wp.append(gamma)
-        return x, y, vp, wp
-
     def followPath(self, path):
         self.path = path
         pt = self.lookahead()
@@ -134,7 +106,7 @@ class robot(object):
         w = []
         i = 10
         while self.closest() != len(self.path) - 1:
-            a, b, c, d = self.mv2pt2(pt)
+            a, b, c, d = self.mv2pt(pt)
             pt = self.lookahead()
             x += a
             y += b
@@ -215,7 +187,7 @@ def main2():
     map = Map("maps/rss_offset.json")
     planner = RRT(map)
     start = [.5, .5]
-    goal = [3.50, 2.5]
+    goal = [3.5, 2.5]
     path = np.array(planner.getPath(start, goal))
     r = robot(start[0], start[1], 0, map)
     x, y, v, w = r.followPath(path)
