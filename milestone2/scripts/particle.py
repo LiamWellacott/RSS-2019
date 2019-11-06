@@ -137,17 +137,26 @@ class Particle(object):
         -------
             None
         """
-        # Calculate distance in robot frame
-        # First turn
-        yaw = yaw_vel/ODOM_RATE
-        # X and Y velocity
-        x = x_vel/ODOM_RATE
-        y = y_vel/ODOM_RATE
-        # update yaw position.
-        self.yaw += yaw + np.random.uniform(-1, 1) * self.turn_noise
-        # project x and y
-        self.x += x*np.cos(self.yaw) + np.random.uniform(-1, 1) * self.move_noise
-        self.y += y*np.sin(self.yaw) + np.random.uniform(-1, 1) * self.move_noise
+        dt = 1/ODOM_RATE
+        # If angular velocity is close to 0 we use the simpler motion model
+        # equation derived from http://www.cs.columbia.edu/~allen/F17/NOTES/icckinematics.pdf
+        if yaw_vel > 1e-6:
+            # Compute the rotational radius
+            r = x_vel/yaw_vel
+            # Instantaneous center of curvature
+            icc = [self.x - r*np.sin(self.yaw), self.y + r*np.cos(self.yaw)]
+            wdt = yaw_vel*dt
+            self.x = (self.x - icc[0])*np.cos(wdt) - (self.y - icc[1])*np.sin(wdt) + icc[0]
+            self.y = (self.x - icc[0])*np.sin(wdt) + (self.y - icc[1])*np.cos(wdt) + icc[1]
+            self.yaw = self.yaw + wdt
+        else:
+            self.x += x_vel*np.cos(self.yaw)*dt
+            self.y += x_vel*np.sin(self.yaw)*dt
+            # yaw remains constant when no angular velocity
+        # add some noise to the update
+        self.x += np.random.uniform(-1, 1) * self.move_noise
+        self.y += np.random.uniform(-1, 1) * self.move_noise
+        self.yaw += np.random.uniform(-1, 1) * self.turn_noise
         return
 
 class ParticleFilter(object):
@@ -321,7 +330,7 @@ class Robot(object):
         self.yaw = yaw
 
         self.dict={}
-        self.values=[]
+
         self.counter = 0
 
         # Initialise particle filter
@@ -350,11 +359,12 @@ class Robot(object):
         # add the received position increment to the particles
         vel = msg.twist.twist
         self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
-        
-        self.values.append([vel.linear.x, vel.linear.y, vel.angular.z])
+
+        values = [vel.linear.x, vel.linear.y, vel.angular.z]
         self.dict.update({str(self.counter) : values})
         self.counter+=1
         self.dumpData("values.json")
+
         return
 
     def dumpData(self, file_path):

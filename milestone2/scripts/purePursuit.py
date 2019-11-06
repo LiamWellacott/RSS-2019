@@ -28,8 +28,8 @@ class PurePursuit(object):
         k = np.divide(np.dot(x_p, y_pp) - np.dot(x_pp, y_p), np.power((np.power(x_p, 2) + np.power(y_p, 2)), 3/2))
 
         r = 1 / k
-        plt.plot(np.arange(len(r)), r)
-        plt.show()
+        #plt.plot(np.arange(len(r)), r)
+        #plt.show()
 
         return k
 
@@ -65,19 +65,53 @@ class PurePursuit(object):
         s_t_prime = .5* (s_t1 - s_t_1)
         s_t_pp = s_t1 - 2*s_t + s_t_1
 
-        fig, ax = plt.subplots(2,2)
-        ax[0][0].plot(self.path[:,0], self.path[:,1], 'r')
-        ax[1][0].plot(np.arange(len(s_t[:,0])), s_t[:,0], 'y')
-        ax[1][0].plot(np.arange(len(s_t_prime[:,0])), s_t_prime[:,0], 'b')
-        ax[1][0].plot(np.arange(len(s_t_pp[:,0])), s_t_pp[:,0], 'r')
+        #fig, ax = plt.subplots(2,2)
+        #ax[0][0].plot(self.path[:,0], self.path[:,1], 'r')
+        #ax[1][0].plot(np.arange(len(s_t[:,0])), s_t[:,0], 'y')
+        #ax[1][0].plot(np.arange(len(s_t_prime[:,0])), s_t_prime[:,0], 'b')
+        #ax[1][0].plot(np.arange(len(s_t_pp[:,0])), s_t_pp[:,0], 'r')
 
-        ax[1][1].plot(np.arange(len(s_t[:,1])), s_t[:,1], 'y')
-        ax[1][1].plot(np.arange(len(s_t_prime[:,1])), s_t_prime[:,1], 'b')
-        ax[1][1].plot(np.arange(len(s_t_pp[:,1])), s_t_pp[:,1], 'r')
-        plt.show()
+        #ax[1][1].plot(np.arange(len(s_t[:,1])), s_t[:,1], 'y')
+        #ax[1][1].plot(np.arange(len(s_t_prime[:,1])), s_t_prime[:,1], 'b')
+        #ax[1][1].plot(np.arange(len(s_t_pp[:,1])), s_t_pp[:,1], 'r')
+        #plt.show()
 
         return s_t_pp
 
+    def _desired_vel(self):
+        k = self._path_curvature()
+        max_vel = 0.26
+        turn_cst = 0.05
+        max_acc = 0.05
+
+        vel = []
+        for i in k:
+            # i is the curvature at a given point on the curve
+            vel.append(min(max_vel, turn_cst/i))
+
+        plt.plot(np.arange(len(vel)), vel)
+        plt.show()
+
+        vel_acc = []
+        for i, w in enumerate(reversed(vel[:-1]), start=1):
+            w.append(min(w, math.sqrt(w[-i]**2 + 2 * max_acc * \
+                            math.sqrt((self.path[i][0]-self.path[-i][0])**2 + (self.path[i][1]-self.path[-i][1])**2))))
+
+        vel_acc[0] = 0
+
+        for i, w in enumerate(vel[1:], start=1):
+            test = math.sqrt(vel_acc[i-1]**2 + 2*max_acc* \
+                         math.sqrt((self.path[i][0] - self.path[i-1][0]) ** 2 + (self.path[i][1] - self.path[i-1][1]) ** 2))
+            print(test)
+            if test < vel_acc[i]:
+                vel_acc[i] = test
+            else:
+                break
+
+        plt.plot(np.arange(len(vel_acc)), vel_acc)
+        plt.show()
+
+        return vel
 
     def control(self, pose):
         return
@@ -131,7 +165,7 @@ def main():
 
     start = [.4, .4, np.pi/20]
     pp = PurePursuit(path, np.array(start), 1)
-    pp._path_curvature()
+    pp._desired_vel()
     l = pp.lookahead()
     c = pp.curvature(l)
     p2 = path[1]
