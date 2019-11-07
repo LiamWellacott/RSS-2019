@@ -11,10 +11,10 @@ class Arm:
     SPEED = 0.05
 
     IDLE_SEQUENCE = [[0,0,0,0,0,0]]
-    PUSH_BUTTON_SEQUENCE = [[0, 0, -0.8, 0, 0, 0]]
-    MOVE_OBSTACLE_SEQUENCE = [[0, 0, -1.0, 0.5, 0, 0], [0, 1, -1, 0.5, 0, 0], [0, -1, -1, 0.5, 0, 0]]
+    PUSH_BUTTON_SEQUENCE = [[0, 0, -0.8, 0, 0, 0], IDLE_SEQUENCE[0]]
+    MOVE_OBSTACLE_SEQUENCE = [[0, 0, -1.0, 0.5, 0, 0], [0, 1, -1, 0.5, 0, 0], [0, -1, -1, 0.5, 0, 0], IDLE_SEQUENCE[0]]
     PICKUP_PREPARE=[[0,0,-1.5,0,0.8,1]]
-    PICKUP_SEQUENCE = [[0,0,-1.5,0,0.8,1], [0,0,-1.5,0,0.8,0.2], [0,0,0,0,0.8,0.2],[0,0,-1.4,0,0.8,0.2],[0,0,-1.4,0,0.8,1]]
+    PICKUP_SEQUENCE = [[0,0,-1.5,0,0.8,1], [0,0,-1.5,0,0.8,0.2], [0,0,0,0,0.8,0.2],[0,0,-1.4,0,0.8,0.2],[0,0,-1.4,0,0.8,1], IDLE_SEQUENCE[0]]
 
     def __init__(self):
 
@@ -34,7 +34,7 @@ class Arm:
 
         lower_limits = [0, -1.57, -1.57, -1.57, -1.57,   -1]
         upper_limits = [0,  1.57,  1.57,  1.57,  1.57, 1.57]
-        
+
         new_data = np.maximum(lower_limits,data)
         new_data = np.minimum(new_data,upper_limits)
    
@@ -48,7 +48,7 @@ class Arm:
         None # TODO how do we use this info
 
     def step(self):
-        
+
         directions = np.sign(np.array(self.target_state) - np.array(self.current_state))
         # increment the positibn
         new_position = []
@@ -56,7 +56,7 @@ class Arm:
             new_position.append(self.current_state[i])
             if not self._atPositionDim(self.target_state[i], i):
                 new_position[i] += directions[i] * self.SPEED
-                
+
                 # TODO remove and use sensor
                 self.current_state[i] += (directions[i] * self.SPEED)
 
@@ -90,8 +90,9 @@ class Arm:
 
                 if self._atPosition(self.sequence[self.stage]):
                     if self.stage == len(self.sequence)-1:
-                        rospy.loginfo("resetting to idle")
-                        self.runSequence(self.IDLE_SEQUENCE)
+                        #rospy.loginfo("resetting to idle")
+                        #self.runSequence(self.IDLE_SEQUENCE)
+                        return
                     else:
                         self.stage += 1
                         self.target_state = self.sequence[self.stage]
@@ -101,7 +102,7 @@ class Arm:
 if __name__ == "__main__":
 
     arm = Arm()
-    arm.runSequence(arm.PICKUP_SEQUENCE)
+    arm.runSequence(arm.PICKUP_PREPARE)
     # loop
     rate = rospy.Rate(20) # TODO spin server
     while not rospy.is_shutdown():

@@ -32,7 +32,7 @@ NUM_PARTICLES = 50
 
 PUBLISH_RATE = 0.1
 
-ODOM_RATE = 30
+ODOM_RATE = 30.
 
 NOISE_MOVE = 0.01
 NOISE_TURN = np.deg2rad(0.01)
@@ -136,10 +136,10 @@ class Particle(object):
         -------
             None
         """
-        dt = 1/ODOM_RATE
+        dt = 1./ODOM_RATE
         # If angular velocity is close to 0 we use the simpler motion model
         # equation derived from http://www.cs.columbia.edu/~allen/F17/NOTES/icckinematics.pdf
-        if yaw_vel > 1e-6:
+        if np.abs(yaw_vel) > 1e-6:
             # Compute the rotational radius
             r = x_vel/yaw_vel
             # Instantaneous center of curvature
@@ -153,9 +153,9 @@ class Particle(object):
             self.y += x_vel*np.sin(self.yaw)*dt
             # yaw remains constant when no angular velocity
         # add some noise to the update
-        self.x += np.random.uniform(-1, 1) * self.move_noise
-        self.y += np.random.uniform(-1, 1) * self.move_noise
         self.yaw += np.random.uniform(-1, 1) * self.turn_noise
+        self.x += np.random.uniform(-1, 1) * self.move_noise * np.cos(self.yaw)
+        self.y += np.random.uniform(-1, 1) * self.move_noise * np.sin(self.yaw)
         return
 
 class ParticleFilter(object):

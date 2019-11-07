@@ -1,0 +1,7 @@
+<launch>
+
+
+	<node pkg="milestone2" name="milestone2" type="particle.py" output="screen"/>
+	<node pkg="collision_avoidance" name="CollisionAvoidance" type="avoid.py" />
+
+</launch>
