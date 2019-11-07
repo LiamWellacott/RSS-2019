@@ -1,0 +1,4 @@
+float64[2] init
+float64[2] goal
+---
+float64[] path

@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
-#import rospy
+import rospy
 import numpy as np
 import json
 import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 from copy import copy as copy
+
+from milestone2.srv import RRTsrv, RRTsrvResponse
 
 import time
 
@@ -73,8 +75,12 @@ class RRT(object):
         self.pose = {}
         self.last_index = 0
         self.heurisitc = self.l2heurisitc
+        rospy.init_node('rrt_path_planer')
+        s = rospy.Service('rrt', RRTsrv, self.getPath)
+        rospy.loginfo('started rrt service')
+        rospy.spin()
 
-    def getPath(self, q_init, goal):
+    def getPath(self, req):
         # TODO: should be extended to desired pose using some kind of
         # internal model to select approach direction
         # not sure how this is possible
@@ -85,6 +91,10 @@ class RRT(object):
             q_init: current position
             goal: targeted position
         """
+        rospy.loginfo("request path")
+        q_init = req.init
+        goal = req.goal
+        rospy.loginfo("init {}, goal {}".format(q_init, goal))
         # if nothing in the graph yet, initialise
         if not self.graph:
             self._updateGraph([], q_init)
@@ -94,7 +104,8 @@ class RRT(object):
             self.extendGraph(goal)
         path = self.astar(q_init, goal)
         path = self.smoothingPath(path)
-        return path
+        rospy.loginfo("type path {}".format(type(path)))
+        return RRTsrvResponse(path.tolist())
 
     def _updateGraph(self, entry, pose):
         self.last_index += 1
@@ -348,7 +359,6 @@ class RRT(object):
 
         return smooth_path
 
-
     def plotGraph(self, start=None, goal=None, sample=None, path=None):
         fig, ax = plt.subplots()
         fig, ax = self.map.plotMap(fig, ax)
@@ -425,4 +435,5 @@ def main():
     planner.plotGraph(start=start, goal=goal, path=path)
 
 if __name__ == '__main__':
-    main()
+    map = Map("maps/rss_offset.json")
+    planner = RRT(map)
