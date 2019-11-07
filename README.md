@@ -20,9 +20,12 @@ Right now only a run
  - [ ] profile the particle filter.
  - [x] it looks like the intersection dosen't work then the robot has negative coordinates: FIX THIS!!
  - [ ] determine where we should place the map orign.
- - [ ] find a simpler and more elegant way to compute intersections between segments.
+ - [X] find a simpler and more elegant way to compute intersections between segments.
  - [ ] implement various resampling algorithms and evaluate their performances.
  - [ ] comment the files:
       * [x] particle.py
  - [ ] need to find a probability that takes the direction into account.
- - [ ] clean up rrt.py and utile.py.
+ - [X] clean up rrt.py and utile.py.
+ - [ ] integrate particle filter with ros.
+ - [ ] integrate RRT with ros as service.
+ - [ ] integrate particle filter with controller
