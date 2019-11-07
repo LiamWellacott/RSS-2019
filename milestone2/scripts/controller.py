@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-#import rospy
+import rospy
 import numpy as np
 import json
 import matplotlib.pyplot as plt
@@ -13,17 +13,46 @@ import math
 from utile import Map
 from rrt import RRT
 
+from geometry_msgs.msg import Twist
+from gazebo_msgs.msg import ModelStates
+import tf
+
 
 class Controller(object):
     def __init__(self, x, y, yaw, map, path):
+        rospy.init_node("Controller", anonymous=True)
+
+        rospy.loginfo("started controller")
+
         self.yaw = yaw
         self.pose = np.array([x, y])
         self.look = 0.4
         self.map = map
         self.path = path
 
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.modelCB)
+        self.pub = rospy.Publisher('cmd_vel',Twist,queue_size = 10)
+
+        self.rate = rospy.Rate(20)
+
         self.fig, self.ax = plt.subplots(2,2)
         plt.show(block=False)
+
+    def modelCB(self, msg):
+        j = 0
+        for i, s in enumerate(msg.name):
+            if s == "turtlebot3":
+                j = i
+        pose = msg.pose[j]
+        self.pose[0] = pose.position.x
+        self.pose[1] = pose.position.y
+        orientation = (
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z,
+            pose.orientation.w
+        )
+        self.yaw = tf.transformations.euler_from_quaternion(orientation)[2]
 
     def move(self, v, gamma):
         dt = 0.05
@@ -35,18 +64,14 @@ class Controller(object):
                 w = gamma
             else:
                 w = v/r
-        if np.abs(w) > 1e-6:
-            # Compute the rotational radius
-            r = v/w
-            # Instantaneous center of curvature
-            icc = [self.pose[0] - r*np.sin(self.yaw), self.pose[1] + r*np.cos(self.yaw)]
-            wdt = w*dt
-            self.pose[0] = (self.pose[0] - icc[0])*np.cos(wdt) - (self.pose[1] - icc[1])*np.sin(wdt) + icc[0]
-            self.pose[1] = (self.pose[0] - icc[0])*np.sin(wdt) + (self.pose[1] - icc[1])*np.cos(wdt) + icc[1]
-            self.yaw = self.yaw + wdt
-        else:
-            self.pose[0] += v*np.cos(self.yaw)*dt
-            self.pose[1] += v*np.sin(self.yaw)*dt
+        # create message object
+        mc = Twist()
+
+        # set speed
+        mc.linear.x = v
+        mc.angular.z = w
+
+        self.pub.publish(mc)
 
     def closest(self):
         dist = np.linalg.norm(self.path - self.pose, axis=1)
@@ -117,7 +142,6 @@ class Controller(object):
         return x, y, vp, wp
 
     def followPath(self):
-        pt = self.lookahead()
         x = []
         y = []
         v = []
@@ -127,9 +151,11 @@ class Controller(object):
 
         d_ = np.linalg.norm(self.pose - self.path[-1])
         dist = []
-        while d_ > 1e-1:
-            a, b, c, d = self.mv2pt(pt)
+        while d_ > 1e-1 and not rospy.is_shutdown():
+
             pt = self.lookahead()
+            a, b, c, d = self.mv2pt(pt)
+
             x += a
             y += b
             v += c
@@ -140,6 +166,10 @@ class Controller(object):
             if i % 10 == 0:
                 self.plotTraj(x, y, yaw, v, w, dist, pt)
             i += 1
+
+            self.rate.sleep()
+        # Stop the robot 
+        self.move(0, 0)
         return x, y, v, w, dist
 
     def plotTraj(self, x, y, yaw, v, w, d, goal):
@@ -213,23 +243,12 @@ def main():
 def main2():
     map = Map("maps/rss_offset.json")
     planner = RRT(map)
-    start = [2.0, 1.75]
-    goal = [2.0, 2.6]
-    #goal = [.5, .6]
-    path = np.array(planner.getPath(start, goal))
-    #path = np.array([[.5, .5], [.7, .5], [1., .5]])
-    r = Controller(start[0], start[1], 0, map, path)
-    #r.lookahead()
-    x, y, v, w, d = r.followPath()
-
-    start = [.4, 2.8]
-    goal = [2.5, 0.5]
+    start = [.5, .5]
+    goal = [3.5, 2.5]
     path = np.array(planner.getPath(start, goal))
     r = Controller(start[0], start[1], 0, map, path)
-    #r.lookahead()
+    a = input("presse a key to start controller: ")
     x, y, v, w, d = r.followPath()
-    #planner.plotGraph(start=start, goal=goal, path=path)
-
 
 if __name__ == "__main__":
     main2()
