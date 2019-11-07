@@ -17,6 +17,8 @@ from geometry_msgs.msg import Twist
 from gazebo_msgs.msg import ModelStates
 import tf
 
+from milestone2.srv import RRTsrv, RRTsrvResponse
+
 
 class Controller(object):
     def __init__(self, x, y, yaw, map, path):
@@ -33,9 +35,11 @@ class Controller(object):
         rospy.Subscriber("gazebo/model_states", ModelStates, self.modelCB)
         self.pub = rospy.Publisher('cmd_vel',Twist,queue_size = 10)
 
-        self.rate = rospy.Rate(20)
+        self.rate = rospy.Rate(30)
 
         self.fig, self.ax = plt.subplots(2,2)
+        self.fig, self.ax[0][0] = self.map.plotMap(self.fig, self.ax[0][0])
+        self.ax[0][0].plot(self.path[:,0], self.path[:,1], 'r')
         plt.show(block=False)
 
     def modelCB(self, msg):
@@ -152,23 +156,22 @@ class Controller(object):
         d_ = np.linalg.norm(self.pose - self.path[-1])
         dist = []
         while d_ > 1e-1 and not rospy.is_shutdown():
-
             pt = self.lookahead()
             a, b, c, d = self.mv2pt(pt)
+            d_ = np.linalg.norm(self.pose - self.path[-1])
 
             x += a
             y += b
             v += c
             w += d
             yaw.append(self.yaw)
-            d_ = np.linalg.norm(self.pose - self.path[-1])
             dist.append(d_)
             if i % 10 == 0:
                 self.plotTraj(x, y, yaw, v, w, dist, pt)
             i += 1
 
             self.rate.sleep()
-        # Stop the robot 
+        # Stop the robot
         self.move(0, 0)
         return x, y, v, w, dist
 
@@ -242,13 +245,26 @@ def main():
 
 def main2():
     map = Map("maps/rss_offset.json")
-    planner = RRT(map)
     start = [.5, .5]
     goal = [3.5, 2.5]
-    path = np.array(planner.getPath(start, goal))
-    r = Controller(start[0], start[1], 0, map, path)
-    a = input("presse a key to start controller: ")
-    x, y, v, w, d = r.followPath()
+
+    rospy.loginfo("Waiting for rrt service...")
+    rospy.wait_for_service('rrt')
+    rospy.loginfo("Ask for a path")
+
+    try:
+        rrt = rospy.ServiceProxy('rrt', RRTsrv)
+        resp = rrt(start, goal)
+        path = np.array(resp.path).reshape((-1,2))
+        r = Controller(start[0], start[1], 0, map, path)
+        print(path)
+        a = input("presse a key to start controller: ")
+        x, y, v, w, d = r.followPath()
+
+    except rospy.ServiceException, e:
+        print("Service call failed: %s"%e)
+        path = [.5, .5]
+
 
 if __name__ == "__main__":
     main2()
