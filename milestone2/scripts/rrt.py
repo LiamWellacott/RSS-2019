@@ -346,11 +346,6 @@ class RRT(object):
                     smooth_path[i][j] += weight_data * (new_path[i][j] - smooth_path[i][j]) + \
                         weight_smooth * (smooth_path[i-1][j] + smooth_path[i+1][j] - 2*smooth_path[i][j])
 
-        #fig, ax = plt.subplots(2)
-        #ax[0].plot(smooth_path[:,0], smooth_path[:,1], 'r')
-        #ax[1].plot(smooth_path[:,0], smooth_path[:,1], 'r')
-        #ax[1].plot(new_path[:,0], new_path[:,1], 'y')
-        #plt.show()
         return smooth_path
 
 
