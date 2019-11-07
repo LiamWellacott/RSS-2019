@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
-#import rospy
+import rospy
 import numpy as np
 import json
 import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 from copy import copy as copy
-import rospy
 
 # Message types
 from sensor_msgs.msg import LaserScan
@@ -296,117 +295,6 @@ class ParticleFilter(object):
         with open(file_path, 'w') as file:
             json.dump(self.dict, file)
 
-class Robot(object):
-    """
-    Robot class used to represent particles and simulate the robot to
-    test the particles.
-    """
-    def __init__(self, map, nb_p, x, y, yaw, nb_rays = 8):
-        """
-        Initializes a particle/robot.
-        input:
-        ------
-            - map: a map object reference.
-        """
-        # initialise
-        rospy.init_node("milestone2", anonymous=True)
-
-        # subscribe
-        rospy.Subscriber("scan", LaserScan, self.scanCallback)
-        rospy.Subscriber("odom", Odometry, self.odomCallback)
-
-        # Pose publisher, initialise message
-        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
-        self.pose_msg = Twist()
-        self.pose_msg.linear.x = x
-        self.pose_msg.linear.y = y
-        self.pose_msg.angular.z = yaw
-        # timer for pose publisher
-        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
-
-        # set initial position
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-
-        self.dict={}
-
-        self.counter = 0
-
-        # Initialise particle filter
-        self.nb_rays = nb_rays
-        self.map = map
-        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
-
-        rospy.loginfo("Started particle filter node")
-        while not rospy.is_shutdown():
-            rospy.sleep(10)
-        return
-
-    def scanCallback(self, msg):
-
-        # get the measurements for the specified number of points out of the scan information
-        indexes = np.rint(np.linspace(0, 360 - 360/self.nb_rays, self.nb_rays)).astype(int)
-        m = np.array(msg.ranges)
-        measure = m[indexes]
-
-        # update position estimation
-        self.poseEstimationUpdate(measure)
-        return
-
-    def odomCallback(self, msg):
-
-        # add the received position increment to the particles
-        vel = msg.twist.twist
-        self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
-
-        values = [vel.linear.x, vel.linear.y, vel.angular.z]
-        self.dict.update({str(self.counter) : values})
-        self.counter+=1
-        self.dumpData("values.json")
-
-        return
-
-    def dumpData(self, file_path):
-        with open(file_path, 'w') as file:
-            json.dump(self.dict, file)
-
-    def poseEstimationUpdate(self, measurements):
-
-        self.particle_filter.measurementUpdate(measurements)
-        self.particle_filter.particleUpdate()
-        x, y, yaw = self.particle_filter.estimate()
-
-        rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
-
-        self.pose_msg.linear.x = x
-        self.pose_msg.linear.y = y
-        self.pose_msg.angular.z = yaw
-        return
-
-    def pubPose(self, event):
-        self.pose_pub.publish(self.pose_msg)
-        return
-
-    def __str__(self):
-        return "x {}, y {}, yaw {} ".format(self.x, self.y, self.yaw)
-
-    def setPose(self, x, y, yaw):
-        """
-        Sets a new pose for the robot.
-        input:
-        ------
-            - x: the new x position.
-            - y: the new y position.
-            - yaw: the new yaw angle.
-        output:
-        -------
-            None
-        """
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-        return
 
 def gaussian(mu, sigma, x):
     """
@@ -421,13 +309,3 @@ def gaussian(mu, sigma, x):
     - the probability of x.
     """
     return np.exp(- ((mu - x) ** 2) / (sigma ** 2) / 2.0) / np.sqrt(2.0 * np.pi * (sigma ** 2))
-
-def main():
-
-    rospack = rospkg.RosPack()
-    path = rospack.get_path('milestone2')
-    map = Map(path + MAP_FILE)
-    r = Robot(map, NUM_PARTICLES, INITIAL_X, INITIAL_Y, INITIAL_YAW, NUM_RAYS)
-
-if __name__ == "__main__":
-    main()
