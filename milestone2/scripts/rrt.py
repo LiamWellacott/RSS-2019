@@ -104,8 +104,11 @@ class RRT(object):
             self.extendGraph(goal)
         path = self.astar(q_init, goal)
         path = self.smoothingPath(path)
-        rospy.loginfo("type path {}".format(type(path)))
-        return RRTsrvResponse(path.tolist())
+        # Reshape the path to publish on in a single array, this should be reshaped
+        # when recieved
+        rospy.loginfo("sending path of shape {}".format(path.shape))
+        path = path.reshape((-1,))
+        return RRTsrvResponse(path)
 
     def _updateGraph(self, entry, pose):
         self.last_index += 1
