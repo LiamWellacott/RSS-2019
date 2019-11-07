@@ -3,6 +3,7 @@
 #import rospy
 import numpy as np
 import json
+import os 
 import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 from copy import copy as copy
@@ -97,6 +98,12 @@ class Particle(object):
         self.sense_noise = sense
         return
 
+    def _filterMeasurement(self, ideal, measurement):
+        if measurement == 0 or measurement == float('inf'):
+            return 1
+        else:
+            return gaussian(ideal, self.sense_noise, measurement)
+
     def measureProb(self, m):
         """
         measures the probability of geting a measurement m when in state x.
@@ -117,11 +124,21 @@ class Particle(object):
             if points[0] is None or points[1] is None:
                     # no intersection found indicating the robot is outside the arena
                     # probability is 0 for whole robot
+                    rospy.loginfo('Error for weights')
                     return 0
             else:
+
+                # filter invalid measurements
+
                 # calculate probability of measurement
-                prob *= gaussian(distances[0], self.sense_noise, m[i])
-                prob *= gaussian(distances[1], self.sense_noise, m[i + int(self.nb_rays/2)])
+                prob *= self._filterMeasurement(distances[0], m[i])
+                prob *= self._filterMeasurement(distances[1], m[i + int(self.nb_rays/2)])
+
+                if prob==0:
+                    rospy.loginfo("m1: %s, m2: %s" % (m[i], m[i + int(self.nb_rays/2)]))
+                    rospy.loginfo("d1: %s, d2: %s" % (distances[0], distances[1]))
+        if prob==0:
+            rospy.loginfo('Product of probs = 0')
         return prob
 
     def move(self, x_vel, y_vel, yaw_vel):
@@ -187,27 +204,11 @@ class ParticleFilter(object):
         ### DATA SAVE FOR VISUALISATION ###
         self.dict = {}
         self.counter = 0
-        self.MAX_VAL = MAX_VAL
         self.true_x = 0
         self.true_y = 0
         self.true_yaw = 0
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.modelCB)
 
-    def modelCB(self, msg):
-        j = 0
-        for i, s in enumerate(msg.name):
-            if s == "turtlebot3":
-                j = i
-        pose = msg.pose[j]
-        self.true_x = pose.position.x
-        self.true_y = pose.position.y
-        orientation = (
-            pose.orientation.x,
-            pose.orientation.y,
-            pose.orientation.z,
-            pose.orientation.w
-        )
-        self.true_yaw = tf.transformations.euler_from_quaternion(orientation)[2]
+
 
     def actionUpdate(self, x_vel, y_vel, yaw_vel):
         """
@@ -236,7 +237,7 @@ class ParticleFilter(object):
             # get the measurement probability for each particle
             w.append(p.measureProb(mt))
         # normailze the weights.
-        rospy.loginfo("w = {}".format(w))
+        #rospy.loginfo("w = {}".format(w))
         self.w = np.array(w)/np.sum(w)
 
     def particleUpdate(self):
@@ -249,9 +250,9 @@ class ParticleFilter(object):
         -------
             None
         """
-        if self.counter < self.MAX_VAL:
-            rospy.loginfo("UPDATE")
-            rospy.loginfo("{} / {}".format(self.counter, self.MAX_VAL))
+        if self.counter < MAX_VAL:
+            #rospy.loginfo("UPDATE")
+            #rospy.loginfo("{} / {}".format(self.counter, MAX_VAL))
             self.updateData()
         # Resample TODO implement
         N = len(self.particles)
@@ -281,15 +282,15 @@ class ParticleFilter(object):
     def updateData(self):
         parts = []
         robot = {"x" : self.true_x, "y" : self.true_y, "yaw" : self.true_yaw}
-        print(len(self.particles))
+        #print(len(self.particles))
         for j, p in enumerate(self.particles):
             a = {j: [p.x, p.y, p.yaw]}
             parts.append(a)
         self.dict.update({self.counter: parts, str(self.counter) + "robot": robot})
 
         self.counter += 1
-        if self.counter >= self.MAX_VAL:
-            rospy.loginfo("DUMP FUCKING DATA")
+        if self.counter >= MAX_VAL:
+            #rospy.loginfo("DUMP FUCKING DATA")
             self.dumpData("test.json")
 
     def dumpData(self, file_path):
@@ -338,10 +339,38 @@ class Robot(object):
         self.map = map
         self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
 
+        self.pos_dict={}
+        self.pos_dict_count=0
+        self.pos_est_values=[]
+        self.pos_true_values=[]
+
+        self.true_x = 0
+        self.true_y = 0
+        self.true_yaw = 0
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.modelCB)
+
         rospy.loginfo("Started particle filter node")
         while not rospy.is_shutdown():
             rospy.sleep(10)
         return
+
+    def modelCB(self, msg):
+        j = 0
+        for i, s in enumerate(msg.name):
+            if s == "turtlebot3":
+                j = i
+        pose = msg.pose[j]
+        self.true_x = pose.position.x
+        self.true_y = pose.position.y
+        orientation = (
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z,
+            pose.orientation.w
+        )
+        self.true_yaw = tf.transformations.euler_from_quaternion(orientation)[2]
+        #rospy.loginfo(['True x: '+str(self.true_x)])
+        #rospy.loginfo(['True yaw: '+str(self.true_yaw)])
 
     def scanCallback(self, msg):
 
@@ -378,6 +407,20 @@ class Robot(object):
         x, y, yaw = self.particle_filter.estimate()
 
         rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
+
+        self.pos_true_values.append([self.true_x,self.true_y, self.true_yaw])
+        self.pos_est_values.append([x,y,yaw])
+        self.pos_dict_count+=1
+        rospy.loginfo(str(self.pos_dict_count)+'/50')
+        if self.pos_dict_count == 50:
+            with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'pos_est_values.json'),'w') as file:
+
+                self.pos_dict.update({'NumPart': NUM_PARTICLES,'NumRays': NUM_RAYS, 'NoiseMove': NOISE_MOVE, 'NoiseTurn':NOISE_TURN,
+                    'NoiseSense':NOISE_SENSE,'Est': self.pos_est_values, 'True': self.pos_true_values})
+
+                json.dump(self.pos_dict, file)
+                print(os.getcwd())
+                rospy.loginfo("DATA SAVED!!!")
 
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
