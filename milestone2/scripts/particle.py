@@ -3,7 +3,7 @@
 #import rospy
 import numpy as np
 import json
-import os 
+import os
 import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 from copy import copy as copy
@@ -24,23 +24,26 @@ from utile import Map
 # initial position in the map as per the brief
 INITIAL_X = 0.561945
 INITIAL_Y = 0.509381
-INITIAL_YAW = 0.039069
+INITIAL_YAW = 1.739999
 
 # relative path from package directory
 MAP_FILE = "/maps/rss_offset.json"
 
 NUM_RAYS = 8
-NUM_PARTICLES = 50
+NUM_PARTICLES = 100
 
 PUBLISH_RATE = 0.1
 
-ODOM_RATE = 30
+ODOM_RATE = 30.
 
-NOISE_MOVE = 0.05
-NOISE_TURN = 0.05
-NOISE_SENSE = 0.5
+NOISE_MOVE = 0.01
+NOISE_TURN = np.deg2rad(1)
+NOISE_SENSE = 0.05
+#NOISE_MOVE = 0.
+#NOISE_TURN = 0.
+#NOISE_SENSE = 0.5
 
-MAX_VAL = 150
+MAX_VAL = 100
 
 class Particle(object):
     """
@@ -122,8 +125,8 @@ class Particle(object):
             points, distances = self.map.minIntersections(self, angle)
 
             if points[0] is None or points[1] is None:
-                    # no intersection found indicating the robot is outside the arena
-                    # probability is 0 for whole robot
+                    # no intersection found indicating the particle is outside the arena
+                    # probability is 0 for whole particle
                     rospy.loginfo('Error for weights')
                     return 0
             else:
@@ -154,10 +157,10 @@ class Particle(object):
         -------
             None
         """
-        dt = 1/ODOM_RATE
+        dt = 1./ODOM_RATE
         # If angular velocity is close to 0 we use the simpler motion model
         # equation derived from http://www.cs.columbia.edu/~allen/F17/NOTES/icckinematics.pdf
-        if yaw_vel > 1e-6:
+        if np.abs(yaw_vel) > np.deg2rad(1e-1):
             # Compute the rotational radius
             r = x_vel/yaw_vel
             # Instantaneous center of curvature
@@ -171,9 +174,10 @@ class Particle(object):
             self.y += x_vel*np.sin(self.yaw)*dt
             # yaw remains constant when no angular velocity
         # add some noise to the update
-        self.x += np.random.uniform(-1, 1) * self.move_noise
-        self.y += np.random.uniform(-1, 1) * self.move_noise
         self.yaw += np.random.uniform(-1, 1) * self.turn_noise
+        self.x += np.random.uniform(-1, 1) * self.move_noise * np.cos(self.yaw)
+        self.y += np.random.uniform(-1, 1) * self.move_noise * np.sin(self.yaw)
+        # print(self.x, self.y)
         return
 
 class ParticleFilter(object):
@@ -207,8 +211,6 @@ class ParticleFilter(object):
         self.true_x = 0
         self.true_y = 0
         self.true_yaw = 0
-
-
 
     def actionUpdate(self, x_vel, y_vel, yaw_vel):
         """
@@ -270,13 +272,15 @@ class ParticleFilter(object):
         self.particles = p_temp
 
     def estimate(self):
-        x = 0
-        y = 0
-        yaw = 0
-        for i, p in enumerate(self.particles):
-            x += self.w[i]*p.x
-            y += self.w[i]*p.y
-            yaw += self.w[i]*p.yaw
+        w = np.array(self.w)
+        i = np.argmax(w)
+        x = self.particles[i].x
+        y = self.particles[i].y
+        yaw = self.particles[i].yaw
+        #for i, p in enumerate(self.particles):
+        #    x += self.w[i]*p.x
+        #    y += self.w[i]*p.y
+        #    yaw += self.w[i]*p.yaw
         return x, y, yaw
 
     def updateData(self):
@@ -314,6 +318,14 @@ class Robot(object):
 
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
+        self.nb_rays = nb_rays
+        self.map = map
+
+        #self.fig, self.ax = plt.subplots()
+        #self.fig, self.ax = self.map.plotMap(self.fig, self.ax)
+        #plt.show(block=False)
+
+        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
 
         # Pose publisher, initialise message
@@ -334,10 +346,8 @@ class Robot(object):
 
         self.counter = 0
 
+
         # Initialise particle filter
-        self.nb_rays = nb_rays
-        self.map = map
-        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
 
         self.pos_dict={}
         self.pos_dict_count=0
@@ -389,6 +399,10 @@ class Robot(object):
         vel = msg.twist.twist
         self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
 
+        #for p in self.particle_filter.particles:
+        #    self.ax.scatter(p.x, p.y)
+        #    plt.draw()
+
         values = [vel.linear.x, vel.linear.y, vel.angular.z]
         self.dict.update({str(self.counter) : values})
         self.counter+=1
@@ -412,7 +426,7 @@ class Robot(object):
         self.pos_est_values.append([x,y,yaw])
         self.pos_dict_count+=1
         rospy.loginfo(str(self.pos_dict_count)+'/50')
-        if self.pos_dict_count == 50:
+        if self.pos_dict_count == MAX_VAL:
             with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'pos_est_values.json'),'w') as file:
 
                 self.pos_dict.update({'NumPart': NUM_PARTICLES,'NumRays': NUM_RAYS, 'NoiseMove': NOISE_MOVE, 'NoiseTurn':NOISE_TURN,
