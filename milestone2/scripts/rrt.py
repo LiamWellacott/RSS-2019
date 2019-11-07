@@ -3,7 +3,9 @@
 import rospy
 import numpy as np
 import json
-import matplotlib.pyplot as plt
+#import matplotlib
+#matplotlib.use('Agg')
+#import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 from copy import copy as copy
 
@@ -15,10 +17,10 @@ from utile import Map
 
 from Queue import PriorityQueue
 
-RADIUS_OBSTACLE = 0.2
+RADIUS_OBSTACLE = 0.22
 RADIUS_TARGET = .08
 PLOT_RADIUS = .05
-RRT_EXTEND_DIST = .20 # 20 CM between two points at most
+RRT_EXTEND_DIST = .22 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
@@ -96,6 +98,8 @@ class RRT(object):
         goal = req.goal
         rospy.loginfo("init {}, goal {}".format(q_init, goal))
         # if nothing in the graph yet, initialise
+        self.graph = {}
+        self.pose = {}
         if not self.graph:
             self._updateGraph([], q_init)
 
@@ -107,6 +111,7 @@ class RRT(object):
         # Reshape the path to publish on in a single array, this should be reshaped
         # when recieved
         rospy.loginfo("sending path of shape {}".format(path.shape))
+        #self.plotGraph(start= q_init, goal=goal, path=path)
         path = path.reshape((-1,))
         return RRTsrvResponse(path)
 
@@ -304,6 +309,7 @@ class RRT(object):
                     fringe.put(child)
 
     def smoothingPath(self, path):
+        '''
         for i in range(SMOOTHING_ITERATIONS):
             index1 = np.random.randint(0, len(path)-1)
             index2 = np.random.randint(0, len(path)-1)
@@ -322,9 +328,11 @@ class RRT(object):
                 path = path[:index_low+1] + middle + path[index_up:]
         # Second smoothing, consist in having regularly spaced points and curving corners
         # TODO: define those variables as class constants.
+
+        smooth_path = np.copy(path)
+        '''
         path = np.array(path)
         new_path = np.copy(path[0])
-
         min_step = 0.10
 
         for i in range(len(path)-1):
@@ -347,6 +355,7 @@ class RRT(object):
             new_path = np.vstack((new_path, path[i+1]))
 
         smooth_path = np.copy(new_path)
+
 
         weight_data = 0.5
         weight_smooth = 0.5
@@ -387,7 +396,7 @@ class RRT(object):
 
         if path is not None:
             for node in path:
-                circle_target_1 = plt.Circle(node, RADIUS_OBSTACLE, color='r', alpha=0.5)
+                circle_target_1 = plt.Circle(node, 0.01, color='r', alpha=0.5)
                 plt.gcf().gca().add_artist(circle_target_1)
                 #plt.scatter(node[0], node[1], color='r', marker='.')
         plt.axis('scaled')

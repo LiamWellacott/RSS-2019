@@ -6,8 +6,10 @@ import rospkg
 import tf
 
 import numpy as np
+# To implement our task Queue
+from Queue import Queue
 
-#
+# Misc classes
 from utile import Map
 from controller import Controller
 from particle import ParticleFilter
@@ -21,7 +23,12 @@ from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
-from milestone2.msg import Goal
+from milestone2.msg import Task
+
+
+#import matplotlib
+#matplotlib.use('Agg')
+#import matplotlib.pyplot as plt
 
 # initial position in the map as per the brief
 INITIAL_X = 0.561945
@@ -65,21 +72,22 @@ class Robot(object):
         self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
 
         # subscribe
-        rospy.Subscriber("scan", LaserScan, self.scanCallback)
-        rospy.Subscriber("odom", Odometry, self.odomCallback)
-        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        #rospy.Subscriber("scan", LaserScan, self.scanCallback)
+        #rospy.Subscriber("odom", Odometry, self.odomCallback)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
-        rospy.Subscriber("set_goal", Goal, self.setGoal)
+        rospy.Subscriber("task", Task, self.setObjective)
+        self.objectives = Queue()
         # Pose publisher, initialise message
         # TODO: UNCOMMENT THIS
-        self.pose_msg = Twist()
-        self.pose_msg.linear.x = x
-        self.pose_msg.linear.y = y
-        self.pose_msg.angular.z = yaw
+        #self.pose_msg = Twist()
+        #self.pose_msg.linear.x = x
+        #self.pose_msg.linear.y = y
+        #self.pose_msg.angular.z = yaw
         # timer for pose publisher
         # TODO: UNCOMMENT THIS
-        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
-        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
+        #self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
+        #rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
 
         # Publisher for cmd vel
         self.vel_msg = Twist()
@@ -98,28 +106,57 @@ class Robot(object):
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
-
-            rospy.sleep(10)
+            if self.objectives.empty():
+                rospy.sleep(1)
+            else:
+                self.objectiveHandler(self.objectives.get())
         return
 
-    def setGoal(self, msg):
-        rospy.loginfo("received new goal {}".format(msg.goal))
+    def setObjective(self, msg):
+        rospy.loginfo("received new task {}".format(msg.task))
+        self.objectives.put(msg)
+
+    def goTo(self, goal):
+        rospy.loginfo("received new goal {}".format(goal))
         rospy.loginfo("Waiting for rrt service...")
         rospy.wait_for_service('rrt')
         try:
             rrt = rospy.ServiceProxy('rrt', RRTsrv)
-            resp = rrt([self.x, self.y], msg.goal)
+            resp = rrt([self.x, self.y], goal)
             path = np.array(resp.path).reshape((-1,2))
             rospy.loginfo("Following new path...")
             self.controller.setPath(path)
+
+            #fig, ax = plt.subplots()
+            #fig, ax = self.map.plotMap(fig, ax)
+            #ax.plot(path[:, 0], path[:, 1], 'r')
+            #plt.show()
+
             self.followPath()
             rospy.loginfo("Reached goal.")
         except rospy.ServiceException, e:
             print("Service call failed: %s"%e)
             return
 
+    def objectiveHandler(self, objective):
+        task = objective.task
+        if task == "goal":
+            goal = objective.objective
+            self.goTo(goal)
+            return
+        elif task == "pick":
+            # TODO call handler
+            return
+        elif task == "smash":
+            # TODO call handler
+            return
+        elif move == "move":
+            # TODO call handler
+            return
+        else:
+            rospy.logwaring("Couldn't indentify objective {}".format(task))
+
     def followPath(self):
-        rospy.loginfo(self.controller.isDone(self.x, self.y))
         while not self.controller.isDone(self.x, self.y):
             v, w = self.controller.getSpeed(self.x, self.y, self.yaw)
             self.vel_msg.linear.x = v
