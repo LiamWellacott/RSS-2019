@@ -22,7 +22,7 @@ class Controller(object):
         self.yaw = yaw
         pt = self.lookahead()
         v, w = self.mv2pt(pt)
-        return v, w 
+        return v, w
 
     def closest(self):
         dist = np.linalg.norm(self.path - self.pose, axis=1)
@@ -64,7 +64,7 @@ class Controller(object):
     def mv2pt(self, pt):
 
         kv = 1
-        kd = 0
+        kd = 0.1
         kh = 5
 
         vm = 0.26
