@@ -26,6 +26,6 @@ Right now only a run
       * [x] particle.py
  - [ ] need to find a probability that takes the direction into account.
  - [X] clean up rrt.py and utile.py.
- - [ ] integrate particle filter with ros.
- - [ ] integrate RRT with ros as service.
+ - [X] integrate particle filter with ros.
+ - [X] integrate RRT with ros as service.
  - [ ] integrate particle filter with controller
