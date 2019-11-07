@@ -72,22 +72,22 @@ class Robot(object):
         self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
 
         # subscribe
-        #rospy.Subscriber("scan", LaserScan, self.scanCallback)
-        #rospy.Subscriber("odom", Odometry, self.odomCallback)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        rospy.Subscriber("scan", LaserScan, self.scanCallback)
+        rospy.Subscriber("odom", Odometry, self.odomCallback)
+        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         self.objectives = Queue()
         # Pose publisher, initialise message
         # TODO: UNCOMMENT THIS
-        #self.pose_msg = Twist()
-        #self.pose_msg.linear.x = x
-        #self.pose_msg.linear.y = y
-        #self.pose_msg.angular.z = yaw
+        self.pose_msg = Twist()
+        self.pose_msg.linear.x = x
+        self.pose_msg.linear.y = y
+        self.pose_msg.angular.z = yaw
         # timer for pose publisher
         # TODO: UNCOMMENT THIS
-        #self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
-        #rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
+        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
+        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
 
         # Publisher for cmd vel
         self.vel_msg = Twist()

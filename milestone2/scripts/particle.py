@@ -121,6 +121,9 @@ class Particle(object):
                 # calculate probability of measurement
                 prob *= gaussian(distances[0], self.sense_noise, m[i])
                 prob *= gaussian(distances[1], self.sense_noise, m[i + int(self.nb_rays/2)])
+                if prob == 0:
+                    return 0
+
         return prob
 
     def move(self, x_vel, y_vel, yaw_vel):
@@ -237,13 +240,15 @@ class ParticleFilter(object):
         self.particles = p_temp
 
     def estimate(self):
-        x = 0
-        y = 0
-        yaw = 0
-        for i, p in enumerate(self.particles):
-            x += self.w[i]*p.x
-            y += self.w[i]*p.y
-            yaw += self.w[i]*p.yaw
+        w = np.array(self.w)
+        i = np.argmax(w)
+        x = self.particles[i].x
+        y = self.particles[i].y
+        yaw = self.particles[i].yaw
+        #for i, p in enumerate(self.particles):
+        #    x += self.w[i]*p.x
+        #    y += self.w[i]*p.y
+        #    yaw += self.w[i]*p.yaw
         return x, y, yaw
 
 def gaussian(mu, sigma, x):
