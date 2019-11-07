@@ -1,22 +1,26 @@
 #!/usr/bin/env python
 
+# Ros packages
 import rospy
 import rospkg
-import numpy as np
 import tf
+
+import numpy as np
+
+#
+from utile import Map
+from controller import Controller
+from particle import ParticleFilter
 
 # Message types
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
-
+# Gazebo messages
 from gazebo_msgs.msg import ModelStates
-
-from utile import Map
-from controller import Controller
-
+# RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
-
+# Set goal for the robot
 from milestone2.msg import Goal
 
 # initial position in the map as per the brief
@@ -55,22 +59,27 @@ class Robot(object):
         # initialise
         rospy.init_node("milestone2", anonymous=True)
 
+        # Initialise particle filter
+        self.nb_rays = nb_rays
+        self.map = map
+        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
+
         # subscribe
-        #rospy.Subscriber("scan", LaserScan, self.scanCallback)
-        #rospy.Subscriber("odom", Odometry, self.odomCallback)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        rospy.Subscriber("scan", LaserScan, self.scanCallback)
+        rospy.Subscriber("odom", Odometry, self.odomCallback)
+        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("set_goal", Goal, self.setGoal)
         # Pose publisher, initialise message
         # TODO: UNCOMMENT THIS
-        #self.pose_msg = Twist()
-        #self.pose_msg.linear.x = x
-        #self.pose_msg.linear.y = y
-        #self.pose_msg.angular.z = yaw
+        self.pose_msg = Twist()
+        self.pose_msg.linear.x = x
+        self.pose_msg.linear.y = y
+        self.pose_msg.angular.z = yaw
         # timer for pose publisher
         # TODO: UNCOMMENT THIS
-        #self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
-        #rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
+        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
+        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
 
         # Publisher for cmd vel
         self.vel_msg = Twist()
@@ -84,14 +93,12 @@ class Robot(object):
         self.y = y
         self.yaw = yaw
 
-        # Initialise particle filter
-        self.nb_rays = nb_rays
-        self.map = map
-        # self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
+        # Initialise controller
         self.controller = Controller()
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
+
             rospy.sleep(10)
         return
 
@@ -99,7 +106,6 @@ class Robot(object):
         rospy.loginfo("received new goal {}".format(msg.goal))
         rospy.loginfo("Waiting for rrt service...")
         rospy.wait_for_service('rrt')
-        rospy.loginfo("Ask for a path")
         try:
             rrt = rospy.ServiceProxy('rrt', RRTsrv)
             resp = rrt([self.x, self.y], msg.goal)
@@ -107,12 +113,12 @@ class Robot(object):
             rospy.loginfo("Following new path...")
             self.controller.setPath(path)
             self.followPath()
+            rospy.loginfo("Reached goal.")
         except rospy.ServiceException, e:
             print("Service call failed: %s"%e)
             return
 
     def followPath(self):
-        rospy.loginfo("Enter path follow")
         rospy.loginfo(self.controller.isDone(self.x, self.y))
         while not self.controller.isDone(self.x, self.y):
             v, w = self.controller.getSpeed(self.x, self.y, self.yaw)
@@ -146,20 +152,13 @@ class Robot(object):
 
         # update position estimation
         # TODO UNCOMMENT THIS
-        #self.poseEstimationUpdate(measure)
+        self.poseEstimationUpdate(measure)
         return
 
     def odomCallback(self, msg):
-
         # add the received position increment to the particles
         vel = msg.twist.twist
         self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
-
-        values = [vel.linear.x, vel.linear.y, vel.angular.z]
-        self.dict.update({str(self.counter) : values})
-        self.counter+=1
-        self.dumpData("values.json")
-
         return
 
     def poseEstimationUpdate(self, measurements):
@@ -168,11 +167,15 @@ class Robot(object):
         self.particle_filter.particleUpdate()
         x, y, yaw = self.particle_filter.estimate()
 
-        rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
+        self.x = x
+        self.y = y
+        self.yaw = yaw
 
+        rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
+
         return
 
     def pubPose(self, event):

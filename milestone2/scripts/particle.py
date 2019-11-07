@@ -34,8 +34,8 @@ PUBLISH_RATE = 0.1
 
 ODOM_RATE = 30
 
-NOISE_MOVE = 0.05
-NOISE_TURN = 0.05
+NOISE_MOVE = 0.01
+NOISE_TURN = np.deg2rad(0.01)
 NOISE_SENSE = 0.5
 
 MAX_VAL = 150
@@ -183,31 +183,6 @@ class ParticleFilter(object):
             p.setNoise(NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
             self.particles.append(p)
 
-        ### DATA SAVE FOR VISUALISATION ###
-        self.dict = {}
-        self.counter = 0
-        self.MAX_VAL = MAX_VAL
-        self.true_x = 0
-        self.true_y = 0
-        self.true_yaw = 0
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.modelCB)
-
-    def modelCB(self, msg):
-        j = 0
-        for i, s in enumerate(msg.name):
-            if s == "turtlebot3":
-                j = i
-        pose = msg.pose[j]
-        self.true_x = pose.position.x
-        self.true_y = pose.position.y
-        orientation = (
-            pose.orientation.x,
-            pose.orientation.y,
-            pose.orientation.z,
-            pose.orientation.w
-        )
-        self.true_yaw = tf.transformations.euler_from_quaternion(orientation)[2]
-
     def actionUpdate(self, x_vel, y_vel, yaw_vel):
         """
         Update the particles position after a new transition operation.
@@ -234,8 +209,6 @@ class ParticleFilter(object):
         for p in self.particles:
             # get the measurement probability for each particle
             w.append(p.measureProb(mt))
-        # normailze the weights.
-        rospy.loginfo("w = {}".format(w))
         self.w = np.array(w)/np.sum(w)
 
     def particleUpdate(self):
@@ -248,10 +221,6 @@ class ParticleFilter(object):
         -------
             None
         """
-        if self.counter < self.MAX_VAL:
-            rospy.loginfo("UPDATE")
-            rospy.loginfo("{} / {}".format(self.counter, self.MAX_VAL))
-            self.updateData()
         # Resample TODO implement
         N = len(self.particles)
         beta=0
@@ -276,25 +245,6 @@ class ParticleFilter(object):
             y += self.w[i]*p.y
             yaw += self.w[i]*p.yaw
         return x, y, yaw
-
-    def updateData(self):
-        parts = []
-        robot = {"x" : self.true_x, "y" : self.true_y, "yaw" : self.true_yaw}
-        print(len(self.particles))
-        for j, p in enumerate(self.particles):
-            a = {j: [p.x, p.y, p.yaw]}
-            parts.append(a)
-        self.dict.update({self.counter: parts, str(self.counter) + "robot": robot})
-
-        self.counter += 1
-        if self.counter >= self.MAX_VAL:
-            rospy.loginfo("DUMP FUCKING DATA")
-            self.dumpData("test.json")
-
-    def dumpData(self, file_path):
-        with open(file_path, 'w') as file:
-            json.dump(self.dict, file)
-
 
 def gaussian(mu, sigma, x):
     """
