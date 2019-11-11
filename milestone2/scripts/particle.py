@@ -26,6 +26,7 @@ NOISE_MOVE = 0.01
 NOISE_TURN = np.deg2rad(0.01)
 NOISE_SENSE = 0.5
 
+MIN_VALID_MEASUREMENT = 0.12
 
 class Particle(object):
     """
@@ -83,6 +84,12 @@ class Particle(object):
         self.sense_noise = sense
         return
 
+    def _filterMeasurement(self, ideal, measurement):
+        if measurement < MIN_VALID_MEASUREMENT or measurement == float('inf'):
+            return 1 # there is an error in this measurement, don't include it in the model for this timestep
+        else:
+            return gaussian(ideal, self.sense_noise, measurement)
+
     def measureProb(self, m):
         """
         measures the probability of geting a measurement m when in state x.
@@ -106,8 +113,8 @@ class Particle(object):
                     return 0
             else:
                 # calculate probability of measurement
-                prob *= gaussian(distances[0], self.sense_noise, m[i])
-                prob *= gaussian(distances[1], self.sense_noise, m[i + int(self.nb_rays/2)])
+                prob *= self._filterMeasurement(distances[0], m[i])
+                prob *= self._filterMeasurement(distances[1], m[i + int(self.nb_rays/2)])
                 if prob == 0:
                     return 0
 
