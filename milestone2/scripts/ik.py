@@ -8,7 +8,12 @@ from std_msgs.msg import Float64MultiArray
 
 class Arm:
 
+    THRESHOLD = 0.02
     SPEED = 0.05
+
+    IDLE_SEQUENCE = [np.array([0.1, 0, 0.4])]
+    PUSH_BUTTON_SEQUENCE = [np.array([0.2,0.0,0.13]), IDLE_SEQUENCE[0]]
+    MOVE_OBSTACLE_SEQUENCE = [np.array([0.26, 0.0, 0.35]), np.array([0.28, 0.15, 0.2]), np.array([0.28, -0.15, 0.2]), IDLE_SEQUENCE[0]]
 
     def __init__(self):
 
@@ -18,15 +23,23 @@ class Arm:
         self.l3=0.1
         self.l4=0.035
         self.l5=0.1
-        self.l6=0.0865
+        self.l6=0.1265
 
+        # Create rosnode for controller
         rospy.init_node("arm_control", anonymous=True)
 
+        # The arm is controlled by sending messages to the joint_trajectory_point
+        # which is a 6-rry = [0, shoulder1, shoulder2, elbow, wrist, gripper]
         self.pub = rospy.Publisher('joint_trajectory_point',Float64MultiArray, queue_size =10)
         self.msg = Float64MultiArray()
 
-        self.target_xyz = [0] * 3
-        self.current_q = [0] * 4
+        # To avoid snapping between each desired state we define a target and move by a fixed amount 
+        # each time step
+        self.current_xyz = np.array([0.26, 0.0, 0.35])
+        self.current_q = [0, 0, 0, 0] # hardcoded initial joint position
+
+        # initially the idle sequence is set so the arm is in a neutral position
+        self.startSequence(self.IDLE_SEQUENCE)
 
         # TODO
         self.gripper_state = 0
@@ -37,13 +50,15 @@ class Arm:
                             [0, 0, 1, 0],
                             [0, 0, 0, 1]])
 
-    def _move(self):
+    def _sendCommand(self):
 
+        # The values sent to thfindJointPose arm controller must be within 
+        # the bounds set here or the motors in the arm can crash
         data = [0] + self.current_q + [self.gripper_state]
         lower_limits = [0, -1.57, -1.57, -1.57, -1.57,   -1]
         upper_limits = [0,  1.57,  1.57,  1.57,  1.57, 1.57]
 
-        rospy.loginfo("%s" % data)
+        #rospy.loginfo("%s" % data)
         new_data = np.maximum(lower_limits,data)
         new_data = np.minimum(new_data,upper_limits)
    
@@ -113,36 +128,87 @@ class Arm:
 
         return Jp
 
-    def setTarget(self, target):
-        self.target_xyz = target
-
     def step(self):
+        '''
+        periodic update of the arm, if a sequence has been requested progress in the sequence happens here
+        '''
+        if self._routineFinished():
+            return # nothing to do
 
+        # Calculate current joint position
         j1,j2,j3,jEE = self.findJointPos()
 
-        step = (self.target_xyz - jEE) * self.SPEED
+        # Convert to XYZ
+        self.current_xyz = jEE
+        diff_xyz = self.target_xyz - self.current_xyz
 
         J=self.geomJac(j1,j2,j3,jEE)
         invJ = np.linalg.pinv(J)
+        radTheta=np.dot(invJ,diff_xyz)
+        directions = np.sign(radTheta)
 
-        radTheta=np.dot(invJ,step)
+        # TODO use the sensor values
+        for i in range(len(radTheta)):
+            self.current_q[i] += directions[i] * self.SPEED
 
-        # no assignment, use the sensor values
-        for i, theta in enumerate(radTheta):
-            self.current_q[i] += theta
+        # Send the new state to the arm.
+        self._sendCommand()
 
-        self._move()
+        # check if we need to move to the next stage of the routine
+        self._stepRoutine()
 
+    def startSequence(self, seq):
+        '''
+        sets the passed sequence and sets the initial target position
+        '''
+        self.sequence = seq
+        self._stepRoutine(start_routine=True)
+
+    def _atTarget(self):
+        '''
+        true if all joint positions are in the target state (by THRESHOLD) 
+        '''
+        for i in range(len(self.current_xyz)):
+            if not self._atJointTarget(i):
+                return False
+        return True
+
+    def _atJointTarget(self, dimension):
+        '''
+        true if the difference between target and current for given dimension is under THRESHOLD
+        '''
+        return abs(self.target_xyz[dimension] - self.current_xyz[dimension]) < self.THRESHOLD
+
+    def _routineFinished(self):
+        '''
+        true if the current stage is the end of the sequence
+        '''
+        return self.stage == len(self.sequence)
+
+    def _stepRoutine(self, start_routine=False):
+        if start_routine:
+            self.stage = 0
+            self.target_xyz = self.sequence[self.stage]
+        else:
+            if self._atTarget(): # if at next objective
+                # move to the next stage
+                self.stage += 1
+                if not self._routineFinished(): 
+                    self.target_xyz = self.sequence[self.stage]
 
 def main():
-    rob=Arm()
+    arm=Arm()
 
-    # go from initial position to xyz
-    rob.setTarget(np.array([0.1, 0, 0.4]))
+    once = True
 
     rate = rospy.Rate(20) # TODO spin server
     while not rospy.is_shutdown():
-        rob.step()
+        arm.step()
+
+        if arm._routineFinished() and once:
+            arm.startSequence(arm.MOVE_OBSTACLE_SEQUENCE)
+            once = False
+
         rate.sleep()
 
 if __name__ == "__main__":
