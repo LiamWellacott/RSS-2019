@@ -18,8 +18,9 @@ def main():
     msg = Task()
     rospy.sleep(DELAY)
     p1 = poi['Button']
+    p1_ = [p1[0] - 0.2, p1[1] - 0.2]
     msg.task = "goal"
-    msg.objective = p1
+    msg.objective = p1_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
