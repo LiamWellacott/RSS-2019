@@ -10,6 +10,7 @@ class Controller(object):
 
     def setPath(self, path):
         self.path = path
+        self.first = True
 
     def isDone(self, x, y):
         d = np.sqrt((x - self.path[-1][0])**2 + (y - self.path[-1][1])**2)
@@ -68,7 +69,7 @@ class Controller(object):
         kh = 5
 
         vm = 0.26
-        wm = 0.20
+        wm = 1.82
 
         dx = pt[0] - self.pose[0]
         dy = pt[1] - self.pose[1]
@@ -89,4 +90,9 @@ class Controller(object):
                 w = gamma
             else:
                 w = v/r
+        #w = min(w, wm)
+        if self.first and np.abs(gamma) > 1e-1:
+            v = 0
+        elif self.first and np.abs(gamma) < 1e-1:
+            self.first = False
         return v, w
