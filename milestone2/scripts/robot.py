@@ -34,12 +34,13 @@ from milestone2.msg import Task
 INITIAL_X = 3.80
 INITIAL_Y = 1.50
 INITIAL_YAW = np.pi
+#PATH = [[3.60, 1.5], [3.40, 1.5], [3.20, 1.5], [3.0, 1.5], [2.8, 1.5]]
 
 # relative path from package directory
 MAP_FILE = "/maps/rss_offset.json"
 
 NUM_RAYS = 8
-NUM_PARTICLES = 50
+NUM_PARTICLES = 25
 
 PUBLISH_RATE = 0.1
 
@@ -125,6 +126,7 @@ class Robot(object):
             resp = rrt([self.x, self.y], goal)
             path = np.array(resp.path).reshape((-1,2))
             rospy.loginfo("Following new path...")
+            #path = np.array(PATH)
             self.controller.setPath(path)
 
             #fig, ax = plt.subplots()
@@ -146,12 +148,15 @@ class Robot(object):
             return
         elif task == "pick":
             # TODO call handler
+            rospy.loginfo("Pick up sample")
             return
         elif task == "smash":
             # TODO call handler
+            rospy.loginfo("Smash button")
             return
-        elif move == "move":
+        elif task == "move":
             # TODO call handler
+            rospy.loginfo("move obstacle")
             return
         else:
             rospy.logwaring("Couldn't indentify objective {}".format(task))
