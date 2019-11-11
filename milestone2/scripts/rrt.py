@@ -104,8 +104,8 @@ class RRT(object):
         goal = req.goal
         rospy.loginfo("init {}, goal {}".format(q_init, goal))
         # if nothing in the graph yet, initialise
-        self.graph = {}
-        self.pose = {}
+        #self.graph = {}
+        #self.pose = {}
         if not self.graph:
             self._updateGraph([], q_init)
 
@@ -315,7 +315,7 @@ class RRT(object):
                     fringe.put(child)
 
     def smoothingPath(self, path):
-        '''
+
         for i in range(SMOOTHING_ITERATIONS):
             index1 = np.random.randint(0, len(path)-1)
             index2 = np.random.randint(0, len(path)-1)
@@ -336,7 +336,7 @@ class RRT(object):
         # TODO: define those variables as class constants.
 
         smooth_path = np.copy(path)
-        '''
+
         path = np.array(path)
         new_path = np.copy(path[0])
         min_step = 0.10
@@ -378,21 +378,34 @@ class RRT(object):
         return smooth_path
 
     def plotGraph(self, start=None, goal=None, sample=None, path=None):
+        rospy.loginfo("start plotting")
         fig, ax = plt.subplots()
+        rospy.loginfo("Plotting map")
         fig, ax = self.map.plotMap(fig, ax)
+        rospy.loginfo("map plotted")
 
+        rospy.loginfo("Plot start")
         if start is not None:
             #Draw start and target points
             circle_start_1 = plt.Circle(start, PLOT_RADIUS, color='g', alpha=0.5)
             plt.gcf().gca().add_artist(circle_start_1)
+
+        rospy.loginfo("Start plotted")
+        rospy.loginfo("Plot goal")
+
         if goal is not None:
             circle_target_1 = plt.Circle(goal, PLOT_RADIUS, color='b', alpha=0.5)
             plt.gcf().gca().add_artist(circle_target_1)
+
+        rospy.loginfo("goal plotted")
+        rospy.loginfo("Plot sample")
 
         if sample is not None:
             circle_target_1 = plt.Circle(sample, PLOT_RADIUS, color='r', alpha=0.5)
             plt.gcf().gca().add_artist(circle_target_1)
 
+        rospy.loginfo("Sample plotted")
+        rospy.loginfo("Plot tree")
         #Draw tree
         for key in self.graph:
             pose = self.pose[key]
@@ -400,11 +413,18 @@ class RRT(object):
                 pose_edge = self.pose[edge]
                 plt.plot([pose_edge[0], pose[0]], [pose_edge[1], pose[1]], color='y', marker='.')
 
+        rospy.loginfo("Tree plotted")
+
+        rospy.loginfo("Plot path")
+
         if path is not None:
             for node in path:
                 circle_target_1 = plt.Circle(node, 0.01, color='r', alpha=0.5)
                 plt.gcf().gca().add_artist(circle_target_1)
                 #plt.scatter(node[0], node[1], color='r', marker='.')
+
+        rospy.loginfo("Path plotted")
+
         plt.axis('scaled')
         plt.grid()
         plt.show()
