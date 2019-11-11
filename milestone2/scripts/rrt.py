@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 
 import rospy
+import rospy
+import rospkg
+import tf
+
 import numpy as np
 import json
 #import matplotlib
 #matplotlib.use('Agg')
 #import matplotlib.pyplot as plt
-from matplotlib import collections as mc
+#from matplotlib import collections as mc
 from copy import copy as copy
 
 from milestone2.srv import RRTsrv, RRTsrvResponse
@@ -23,6 +27,8 @@ PLOT_RADIUS = .05
 RRT_EXTEND_DIST = .22 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
+
+MAP_FILE = "/maps/rss_offset.json"
 
 # fixed for repeatability
 np.random.seed(0)
@@ -434,18 +440,10 @@ def performance():
     plt.show()
 
 def main():
-    map = Map("maps/rss_offset.json")
+    rospack = rospkg.RosPack()
+    path = rospack.get_path('milestone2')
+    map = Map(path + MAP_FILE)
     planner = RRT(map)
-    start = [.5, .5]
-    goal = [3.50, 2.5]
-    path = planner.getPath(start, goal)
-    planner.plotGraph(start=start, goal=goal, path=path)
-
-    start = [.4, 2.8]
-    goal = [2.5, 0.5]
-    path = planner.getPath(start, goal)
-    planner.plotGraph(start=start, goal=goal, path=path)
 
 if __name__ == '__main__':
-    map = Map("maps/rss_offset.json")
-    planner = RRT(map)
+    main()

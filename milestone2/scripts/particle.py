@@ -3,8 +3,6 @@
 import rospy
 import numpy as np
 import json
-import matplotlib.pyplot as plt
-from matplotlib import collections as mc
 from copy import copy as copy
 
 # Message types
@@ -12,20 +10,10 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 
-from gazebo_msgs.msg import ModelStates
+#from gazebo_msgs.msg import ModelStates
 import tf
 import sys
 import rospkg
-
-#from utile import Segment
-from utile import Map
-# initial position in the map as per the brief
-INITIAL_X = 0.561945
-INITIAL_Y = 0.509381
-INITIAL_YAW = 0.039069
-
-# relative path from package directory
-MAP_FILE = "/maps/rss_offset.json"
 
 NUM_RAYS = 8
 NUM_PARTICLES = 50
@@ -38,7 +26,6 @@ NOISE_MOVE = 0.01
 NOISE_TURN = np.deg2rad(0.01)
 NOISE_SENSE = 0.5
 
-MAX_VAL = 150
 
 class Particle(object):
     """

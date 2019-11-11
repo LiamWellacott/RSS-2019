@@ -2,8 +2,8 @@
 
 import numpy as np
 import json
-import matplotlib.pyplot as plt
-from matplotlib import collections as mc
+#import matplotlib.pyplot as plt
+#from matplotlib import collections as mc
 from copy import copy as copy
 
 # class using a vectorial represnetation for the segments

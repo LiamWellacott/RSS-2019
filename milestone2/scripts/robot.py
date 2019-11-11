@@ -19,7 +19,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-from gazebo_msgs.msg import ModelStates
+#from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
@@ -31,9 +31,9 @@ from milestone2.msg import Task
 #import matplotlib.pyplot as plt
 
 # initial position in the map as per the brief
-INITIAL_X = 0.561945
-INITIAL_Y = 0.509381
-INITIAL_YAW = 0.039069
+INITIAL_X = 3.80
+INITIAL_Y = 1.50
+INITIAL_YAW = np.pi
 
 # relative path from package directory
 MAP_FILE = "/maps/rss_offset.json"
