@@ -24,7 +24,7 @@ from Queue import PriorityQueue
 RADIUS_OBSTACLE = 0.22
 RADIUS_TARGET = .08
 PLOT_RADIUS = .05
-RRT_EXTEND_DIST = .22 # 20 CM between two points at most
+RRT_EXTEND_DIST = .25 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
@@ -104,8 +104,8 @@ class RRT(object):
         goal = req.goal
         rospy.loginfo("init {}, goal {}".format(q_init, goal))
         # if nothing in the graph yet, initialise
-        #self.graph = {}
-        #self.pose = {}
+        self.graph = {}
+        self.pose = {}
         if not self.graph:
             self._updateGraph([], q_init)
 
@@ -148,7 +148,7 @@ class RRT(object):
         output:
             boolean: True if collision is detected, False otherwise
         """
-        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE)
+        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE) or self.map.intersectCircle(p, RADIUS_OBSTACLE)
 
     def samplePoint(self):
         """Samples a point inside the obstacle this is a guarentie
@@ -334,8 +334,8 @@ class RRT(object):
                 path = path[:index_low+1] + middle + path[index_up:]
         # Second smoothing, consist in having regularly spaced points and curving corners
         # TODO: define those variables as class constants.
-
         smooth_path = np.copy(path)
+
 
         path = np.array(path)
         new_path = np.copy(path[0])
@@ -374,7 +374,6 @@ class RRT(object):
                     aux = smooth_path[i][j]
                     smooth_path[i][j] += weight_data * (new_path[i][j] - smooth_path[i][j]) + \
                         weight_smooth * (smooth_path[i-1][j] + smooth_path[i+1][j] - 2*smooth_path[i][j])
-
         return smooth_path
 
     def plotGraph(self, start=None, goal=None, sample=None, path=None):
@@ -419,7 +418,7 @@ class RRT(object):
 
         if path is not None:
             for node in path:
-                circle_target_1 = plt.Circle(node, 0.01, color='r', alpha=0.5)
+                circle_target_1 = plt.Circle(node, RADIUS_OBSTACLE, color='r', alpha=0.5)
                 plt.gcf().gca().add_artist(circle_target_1)
                 #plt.scatter(node[0], node[1], color='r', marker='.')
 
