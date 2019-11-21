@@ -90,7 +90,9 @@ class Controller(object):
                 w = gamma
             else:
                 w = v/r
-        #w = min(w, wm)
+
+        w = min(w, wm)
+
         if self.first and np.abs(gamma) > 1e-1:
             v = 0
         elif self.first and np.abs(gamma) < 1e-1:
