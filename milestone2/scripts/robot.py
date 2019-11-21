@@ -50,6 +50,8 @@ MAX_VAL = 150
 SCAN_HZ = 5.0
 CUTOFF = 1.0
 
+FILT_SAMPLES = 10
+
 class Robot(object):
     """
     Robot class used to represent particles and simulate the robot to
@@ -218,16 +220,16 @@ class Robot(object):
 
         self.poseEstimationUpdate(measure)
 
-        '''
+
         if self.scanLen == 0:
             self.scanBuff = np.copy(measure.reshape(-1,1))
             self.scanLen += 1
 
-        elif self.scanLen < 5:
+        elif self.scanLen < FILT_SAMPLES:
             self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
             self.scanLen += 1
 
-        if self.scanLen >= 5:
+        if self.scanLen >= FILT_SAMPLES:
             self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
             self.scanBuff = self.scanBuff[:,1:]
 
@@ -235,8 +237,8 @@ class Robot(object):
             for i, ray in enumerate(self.scanBuff):
                 measure[i] = self.filter(ray, SCAN_HZ, CUTOFF)
             # update position estimation
-            #self.poseEstimationUpdate(measure)
-        '''
+            self.poseEstimationUpdate(measure)
+
         return
 
     def odomCallback(self, msg):
