@@ -13,6 +13,7 @@ from Queue import Queue
 from utile import Map
 from controller import Controller
 from particle import ParticleFilter
+from avoid import Avoid
 
 # Message types
 from sensor_msgs.msg import LaserScan
@@ -37,7 +38,7 @@ INITIAL_YAW = np.pi
 #PATH = [[3.60, 1.5], [3.40, 1.5], [3.20, 1.5], [3.0, 1.5], [2.8, 1.5]]
 
 # relative path from package directory
-MAP_FILE = "/maps/rss_offset.json"
+MAP_FILE = "/maps/rss_offset_box1.json"
 
 NUM_RAYS = 8
 NUM_PARTICLES = 25
@@ -45,6 +46,9 @@ NUM_PARTICLES = 25
 PUBLISH_RATE = 0.1
 
 MAX_VAL = 150
+
+SCAN_HZ = 5.0
+CUTOFF = 1.0
 
 class Robot(object):
     """
@@ -65,6 +69,8 @@ class Robot(object):
         self.nb_rays = nb_rays
         self.map = map
         self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
+
+        self.scanLen = 0
 
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
@@ -98,6 +104,7 @@ class Robot(object):
 
         # Initialise controller
         self.controller = Controller()
+        self.collision_avoidance = Avoid()
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
@@ -134,23 +141,46 @@ class Robot(object):
             print("Service call failed: %s"%e)
             return
 
+    def pickUp(self, sample):
+        # TODO implement handler
+        return
+
+    def smashButton(self, button):
+        # TODO implement handler
+        return
+
+    def moveObst(self, obstacle):
+        # TODO implement handler
+        return
+
     def objectiveHandler(self, objective):
         task = objective.task
         if task == "goal":
             goal = objective.objective
+            rospy.loginfo("Moving to objective...")
             self.goTo(goal)
+            rospy.loginfo("Reached objective")
             return
         elif task == "pick":
-            # TODO call handler
-            rospy.loginfo("Pick up sample")
+            rospy.loginfo("Pick up sample...")
+            sample = objective.objective
+            # TODO implement handler
+            self.pickUp(sample)
+            rospy.loginfo("Sample collected")
             return
         elif task == "smash":
-            # TODO call handler
-            rospy.loginfo("Smash button")
+            rospy.loginfo("Smash button...")
+            button = objective.objective
+            # TODO implement handler
+            self.smashButton(button)
+            rospy.loginfo("Button smashed")
             return
         elif task == "move":
-            # TODO call handler
-            rospy.loginfo("move obstacle")
+            rospy.loginfo("move obstacle...")
+            obstacle = objective.objective
+            # TODO implement handler
+            self.moveObst(obstacle)
+            rospy.loginfo("Obstacle moved")
             return
         else:
             rospy.logwaring("Couldn't indentify objective {}".format(task))
@@ -180,15 +210,33 @@ class Robot(object):
         self.yaw = tf.transformations.euler_from_quaternion(orientation)[2]
 
     def scanCallback(self, msg):
-
+        self.collision_avoidance.scanCallback(msg)
         # get the measurements for the specified number of points out of the scan information
         indexes = np.rint(np.linspace(0, 360 - 360/self.nb_rays, self.nb_rays)).astype(int)
         m = np.array(msg.ranges)
         measure = m[indexes]
 
-        # update position estimation
-        # TODO UNCOMMENT THIS
         self.poseEstimationUpdate(measure)
+
+        '''
+        if self.scanLen == 0:
+            self.scanBuff = np.copy(measure.reshape(-1,1))
+            self.scanLen += 1
+
+        elif self.scanLen < 5:
+            self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
+            self.scanLen += 1
+
+        if self.scanLen >= 5:
+            self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
+            self.scanBuff = self.scanBuff[:,1:]
+
+
+            for i, ray in enumerate(self.scanBuff):
+                measure[i] = self.filter(ray, SCAN_HZ, CUTOFF)
+            # update position estimation
+            #self.poseEstimationUpdate(measure)
+        '''
         return
 
     def odomCallback(self, msg):
@@ -219,6 +267,9 @@ class Robot(object):
         return
 
     def pubVel(self, event):
+        if not self.collision_avoidance.isOK():
+            self.vel_msg.linear.x = 0
+            self.vel_msg.angular.z = self.collision_avoidance.turn()
         self.vel_pub.publish(self.vel_msg)
         return
 
@@ -241,6 +292,14 @@ class Robot(object):
         self.y = y
         self.yaw = yaw
         return
+
+    def filter(self, x, hz, fc):
+        alpha = 1. / (1. + 1. / 2.*np.pi*hz*fc)
+        y = np.zeros(len(x))
+        y[0] = x[0]
+        for i in range(1, len(x)):
+            y[i] = alpha*x[i] + (1 - alpha)*y[i-1]
+        return y[-1]
 
 def main():
 
