@@ -17,8 +17,10 @@ def main():
     pub = rospy.Publisher('task', Task, queue_size = 10)
     msg = Task()
     rospy.sleep(DELAY)
+
+    # Go to the button
     p1 = poi['Button']
-    p1_ = [p1[0] - 0.2, p1[1] - 0.2]
+    p1_ = [p1[0], p1[1] - 0.35]
     msg.task = "goal"
     msg.objective = p1_
     pub.publish(msg)
@@ -26,63 +28,73 @@ def main():
     rospy.sleep(DELAY)
 
     msg.task = "smash"
+    msg.objective = p1
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
     p2 = poi['Box1']
+    p2_ = [p2[0], p2[1] + 0.35]
     msg.task = "goal"
-    msg.objective = p2
+    msg.objective = p2_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
     msg.task = "move"
+    msg.objective = p2
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
 
     p3 = poi['Lego1']
+    p3_ = [p3[0], p3[1] + 0.35]
     msg.task = "goal"
+    msg.objective = p3_
+    pub.publish(msg)
+    rospy.loginfo(msg)
+    rospy.sleep(DELAY)
+
+    msg.task = "pick"
     msg.objective = p3
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
-    msg.task = "pick"
+
+    p4 = poi['Lego3']
+    p4_ = [p4[0] - 0.35, p4[1]]
+    msg.task = "goal"
+    msg.objective = p4_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
-
-    p4 = poi['Lego2']
-    msg.task = "goal"
+    msg.task = "pick"
     msg.objective = p4
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
-    msg.task = "pick"
-    pub.publish(msg)
-    rospy.loginfo(msg)
-    rospy.sleep(DELAY)
 
-
-    p5 = poi['Lego3']
+    p5 = poi['Lego2']
+    p5_ = [p5[0], p5[1] - 0.35]
     msg.task = "goal"
-    msg.objective = p5
+    msg.objective = p5_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
     msg.task = "pick"
+    msg.objective = p5
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
 
     p6 = poi['Origin']
+    p6_ = [p6[0], p6[1]]
     msg.task = "goal"
     msg.objective = p6
     pub.publish(msg)
