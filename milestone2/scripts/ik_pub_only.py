@@ -12,8 +12,8 @@ class Arm:
     SPEED = 0.4
 
     IDLE_SEQUENCE = [np.array([0.1, 0.0, 0.4])]
-    PUSH_BUTTON_SEQUENCE = [np.array([0.2,0.0,0.13]), IDLE_SEQUENCE[0]]
-    MOVE_OBSTACLE_SEQUENCE = [np.array([0.3, 0.0, 0.3]), np.array([0.25, 0.2, 0.2]), np.array([0.3, 0.0, 0.3]), np.array([0.25, -0.2, 0.2]), IDLE_SEQUENCE[0]]
+    #PUSH_BUTTON_SEQUENCE = [np.array([0.2,0.0,0.25]), IDLE_SEQUENCE[0]]
+    #MOVE_OBSTACLE_SEQUENCE = [np.array([0.3, 0.0, 0.3]), np.array([0.25, 0.2, 0.2]), np.array([0.3, 0.0, 0.3]), np.array([0.25, -0.2, 0.2]), IDLE_SEQUENCE[0]]
 
     def __init__(self):
 
@@ -42,6 +42,19 @@ class Arm:
         # initially the idle sequence is set so the arm is in a neutral position
         self.startSequence(self.IDLE_SEQUENCE)
         self.next_q = np.array([0.,0.,0.,0.])
+
+    def push_button(self, x, y):
+    	return [np.array([x, y, 0.185]), self.IDLE_SEQUENCE[0]]
+
+
+    def move_obstacle(self, x, y):
+    	#Push objects to the right if objects are already to weedle's right and vice versa
+    	if y>=0.0:
+    		return [np.array([x, y-0.1, 0.2]), np.array([x, y+0.1, 0.2]), self.IDLE_SEQUENCE[0]]
+    	else:
+    		return [np.array([x, y+0.1, 0.2]), np.array([x, y-0.1, 0.2]), self.IDLE_SEQUENCE[0]]
+
+
 
     def jointCallback(self, data):
         # wheel positions (0) (1)
@@ -153,7 +166,7 @@ class Arm:
         # Convert to XYZ
         self.current_xyz = jEE
         diff_xyz_ = (self.target_xyz - self.current_xyz)
-        diff_xyz=diff_xyz_ /(0.0001+np.linalg.norm(diff_xyz_)*20)
+        diff_xyz=diff_xyz_ /(0.0001+np.linalg.norm(diff_xyz_)*25)
 
 
         J=self.geomJac(j1,j2,j3,jEE)
@@ -236,7 +249,7 @@ def main():
         #arm.step()
 
         if arm._routineFinished() and once:
-            arm.startSequence(arm.MOVE_OBSTACLE_SEQUENCE)
+            arm.startSequence(arm.move_obstacle(0.24,-0.13))
             once = False
 
 if __name__ == "__main__":
