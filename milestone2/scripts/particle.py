@@ -15,16 +15,15 @@ import tf
 import sys
 import rospkg
 
-NUM_RAYS = 8
-NUM_PARTICLES = 50
-
 PUBLISH_RATE = 0.1
 
 ODOM_RATE = 30.
 
 NOISE_MOVE = 0.01
 NOISE_TURN = np.deg2rad(2)
-NOISE_SENSE = 0.2
+NOISE_SENSE = 0.1
+
+SENSE_DIST = 0.06 # 6 cm offset between the wheel center and the sensor
 
 MIN_VALID_MEASUREMENT = 0.12
 
@@ -50,6 +49,8 @@ class Particle(object):
         self.x = x + np.random.rand()*x_pert
         self.y = y + np.random.rand()*y_pert
         self.yaw = yaw + np.random.rand()*yaw_pert
+        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
 
         # Noise for sensing and moving
         self.move_noise = 0
@@ -153,6 +154,10 @@ class Particle(object):
         self.yaw += np.random.uniform(-1, 1) * self.turn_noise
         self.x += np.random.uniform(-1, 1) * self.move_noise * np.cos(self.yaw)
         self.y += np.random.uniform(-1, 1) * self.move_noise * np.sin(self.yaw)
+
+        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
+        
         return
 
 class ParticleFilter(object):
