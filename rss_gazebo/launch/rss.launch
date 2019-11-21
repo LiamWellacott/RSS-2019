@@ -8,7 +8,7 @@
   <arg name="headless" default="false"/>
 
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="$(find rss_gazebo)/worlds/rssmap.world"/>
+    <arg name="world_name" value="$(find rss_gazebo)/worlds/real_rss.world"/>
     <arg name="debug" value="$(arg debug)"/>
     <arg name="gui" value="$(arg gui)"/>
     <arg name="paused" value="$(arg paused)"/>
@@ -25,7 +25,7 @@
      command="$(find xacro)/xacro '$(find turtlebot3_description)/urdf/turtlebot3_waffle_pi.urdf.xacro'"/>
 
   <node name="turtlebot3_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
-	   args="-urdf -model turtlebot3 -param turtlebot3_description -x 0.5 -y 0.5 -Y 1.74"/>
+	   args="-urdf -model turtlebot3 -param turtlebot3_description -x 3.80 -y 1.50 -Y 3.14"/>
   <!--
   <node name="px100_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
   args="-urdf -model px100 -param px100_description"/>

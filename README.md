@@ -29,3 +29,5 @@ Right now only a run
  - [X] integrate particle filter with ros.
  - [X] integrate RRT with ros as service.
  - [ ] integrate particle filter with controller
+
+ - [ ] clean code s.t it works with weedle. That is, get rid of every gazebo and matplolib instructions. 

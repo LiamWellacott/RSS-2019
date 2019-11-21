@@ -2,9 +2,10 @@
 
 import numpy as np
 import json
-import matplotlib.pyplot as plt
-from matplotlib import collections as mc
 from copy import copy as copy
+
+#import matplotlib.pyplot as plt
+#from matplotlib import collections as mc
 
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
@@ -238,6 +239,8 @@ class Map(object):
         seg1 = Segment(seg.p1+seg.perp*offset, seg.p2+seg.perp*offset)
         seg2 = Segment(seg.p1-seg.perp*offset, seg.p2-seg.perp*offset)
 
+        sausage_x = [seg1.p1[0], seg1.p2[0], seg2.p1[0], seg2.p2[0]]
+        sausage_y = [seg1.p1[1], seg1.p2[1], seg2.p1[1], seg2.p2[1]]
         #fig, ax = plt.subplots()
         #fig, ax = self.plotMap(fig, ax)
         #fig, ax = seg1.plotSeg(fig, ax)
@@ -248,6 +251,7 @@ class Map(object):
         #plt.show()
 
         for wall in self.segments:
+
             t, s = self._intersection(wall, seg1)
             if 0.0 < t and t < 1.0 and 0.0 < s and s < 1.0:
                 return True
@@ -255,6 +259,14 @@ class Map(object):
                 t, s = self._intersection(wall, seg2)
                 if 0.0 < t and t < 1.0 and 0.0 < s and s < 1.0:
                     return True
+            # check if the wall falls inside the sausage. We only need to consider 3 points of the
+            # sausage
+            if ((sausage_x[0] < wall.p1[0] < sausage_x[1]) or (sausage_x[0] > wall.p1[0] > sausage_x[1])) and \
+                ((sausage_y[0] < wall.p1[1] < sausage_y[2]) or (sausage_y[0] > wall.p1[1] > sausage_y[2])):
+                return True
+            if ((sausage_x[0] < wall.p2[0] < sausage_x[1]) or (sausage_x[0] > wall.p2[0] > sausage_x[1])) and \
+                ((sausage_y[0] < wall.p2[1] < sausage_y[2]) or (sausage_y[0] > wall.p2[1] > sausage_y[2])):
+                return True
         return False
 
     def intersectCircle(self, point, radius):
@@ -343,7 +355,7 @@ def dot(v, w):
     return v[0]*w[0] + v[1]*w[1]
 
 def main():
-    map = Map("maps/rss_offset.json")
+    map = Map("maps/rss_offset_box1.json")
     fig, ax = plt.subplots()
     map.plotMap(fig, ax)
     plt.show()

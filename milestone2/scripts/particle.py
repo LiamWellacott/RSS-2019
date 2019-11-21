@@ -1,49 +1,31 @@
 #!/usr/bin/env python
 
-#import rospy
+import rospy
 import numpy as np
 import json
-import os
-import matplotlib.pyplot as plt
-from matplotlib import collections as mc
 from copy import copy as copy
-import rospy
 
 # Message types
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 
-from gazebo_msgs.msg import ModelStates
+#from gazebo_msgs.msg import ModelStates
 import tf
 import sys
 import rospkg
-
-#from utile import Segment
-from utile import Map
-# initial position in the map as per the brief
-INITIAL_X = 0.561945
-INITIAL_Y = 0.509381
-INITIAL_YAW = 1.739999
-
-# relative path from package directory
-MAP_FILE = "/maps/rss_offset.json"
-
-NUM_RAYS = 8
-NUM_PARTICLES = 100
 
 PUBLISH_RATE = 0.1
 
 ODOM_RATE = 30.
 
 NOISE_MOVE = 0.01
-NOISE_TURN = np.deg2rad(1)
-NOISE_SENSE = 0.05
-#NOISE_MOVE = 0.
-#NOISE_TURN = 0.
-#NOISE_SENSE = 0.5
+NOISE_TURN = np.deg2rad(0.1)
+NOISE_SENSE = 0.1
 
-MAX_VAL = 100
+SENSE_DIST = 0.06 # 6 cm offset between the wheel center and the sensor
+
+MIN_VALID_MEASUREMENT = 0.12
 
 class Particle(object):
     """
@@ -67,6 +49,8 @@ class Particle(object):
         self.x = x + np.random.rand()*x_pert
         self.y = y + np.random.rand()*y_pert
         self.yaw = yaw + np.random.rand()*yaw_pert
+        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
 
         # Noise for sensing and moving
         self.move_noise = 0
@@ -102,8 +86,8 @@ class Particle(object):
         return
 
     def _filterMeasurement(self, ideal, measurement):
-        if measurement == 0 or measurement == float('inf'):
-            return 1
+        if measurement < MIN_VALID_MEASUREMENT or measurement == float('inf'):
+            return 1 # there is an error in this measurement, don't include it in the model for this timestep
         else:
             return gaussian(ideal, self.sense_noise, measurement)
 
@@ -125,23 +109,16 @@ class Particle(object):
             points, distances = self.map.minIntersections(self, angle)
 
             if points[0] is None or points[1] is None:
-                    # no intersection found indicating the particle is outside the arena
-                    # probability is 0 for whole particle
-                    rospy.loginfo('Error for weights')
+                    # no intersection found indicating the robot is outside the arena
+                    # probability is 0 for whole robot
                     return 0
             else:
-
-                # filter invalid measurements
-
                 # calculate probability of measurement
                 prob *= self._filterMeasurement(distances[0], m[i])
                 prob *= self._filterMeasurement(distances[1], m[i + int(self.nb_rays/2)])
+                if prob == 0:
+                    return 0
 
-                if prob==0:
-                    rospy.loginfo("m1: %s, m2: %s" % (m[i], m[i + int(self.nb_rays/2)]))
-                    rospy.loginfo("d1: %s, d2: %s" % (distances[0], distances[1]))
-        if prob==0:
-            rospy.loginfo('Product of probs = 0')
         return prob
 
     def move(self, x_vel, y_vel, yaw_vel):
@@ -160,7 +137,7 @@ class Particle(object):
         dt = 1./ODOM_RATE
         # If angular velocity is close to 0 we use the simpler motion model
         # equation derived from http://www.cs.columbia.edu/~allen/F17/NOTES/icckinematics.pdf
-        if np.abs(yaw_vel) > np.deg2rad(1e-1):
+        if np.abs(yaw_vel) > 1e-6:
             # Compute the rotational radius
             r = x_vel/yaw_vel
             # Instantaneous center of curvature
@@ -177,7 +154,10 @@ class Particle(object):
         self.yaw += np.random.uniform(-1, 1) * self.turn_noise
         self.x += np.random.uniform(-1, 1) * self.move_noise * np.cos(self.yaw)
         self.y += np.random.uniform(-1, 1) * self.move_noise * np.sin(self.yaw)
-        # print(self.x, self.y)
+
+        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
+
         return
 
 class ParticleFilter(object):
@@ -205,13 +185,6 @@ class ParticleFilter(object):
             p.setNoise(NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
             self.particles.append(p)
 
-        ### DATA SAVE FOR VISUALISATION ###
-        self.dict = {}
-        self.counter = 0
-        self.true_x = 0
-        self.true_y = 0
-        self.true_yaw = 0
-
     def actionUpdate(self, x_vel, y_vel, yaw_vel):
         """
         Update the particles position after a new transition operation.
@@ -238,8 +211,6 @@ class ParticleFilter(object):
         for p in self.particles:
             # get the measurement probability for each particle
             w.append(p.measureProb(mt))
-        # normailze the weights.
-        #rospy.loginfo("w = {}".format(w))
         self.w = np.array(w)/np.sum(w)
 
     def particleUpdate(self):
@@ -252,10 +223,6 @@ class ParticleFilter(object):
         -------
             None
         """
-        if self.counter < MAX_VAL:
-            #rospy.loginfo("UPDATE")
-            #rospy.loginfo("{} / {}".format(self.counter, MAX_VAL))
-            self.updateData()
         # Resample TODO implement
         N = len(self.particles)
         beta=0
@@ -283,188 +250,6 @@ class ParticleFilter(object):
         #    yaw += self.w[i]*p.yaw
         return x, y, yaw
 
-    def updateData(self):
-        parts = []
-        robot = {"x" : self.true_x, "y" : self.true_y, "yaw" : self.true_yaw}
-        #print(len(self.particles))
-        for j, p in enumerate(self.particles):
-            a = {j: [p.x, p.y, p.yaw]}
-            parts.append(a)
-        self.dict.update({self.counter: parts, str(self.counter) + "robot": robot})
-
-        self.counter += 1
-        if self.counter >= MAX_VAL:
-            #rospy.loginfo("DUMP FUCKING DATA")
-            self.dumpData("test.json")
-
-    def dumpData(self, file_path):
-        with open(file_path, 'w') as file:
-            json.dump(self.dict, file)
-
-class Robot(object):
-    """
-    Robot class used to represent particles and simulate the robot to
-    test the particles.
-    """
-    def __init__(self, map, nb_p, x, y, yaw, nb_rays = 8):
-        """
-        Initializes a particle/robot.
-        input:
-        ------
-            - map: a map object reference.
-        """
-        # initialise
-        rospy.init_node("milestone2", anonymous=True)
-
-        # subscribe
-        rospy.Subscriber("scan", LaserScan, self.scanCallback)
-        self.nb_rays = nb_rays
-        self.map = map
-
-        #self.fig, self.ax = plt.subplots()
-        #self.fig, self.ax = self.map.plotMap(self.fig, self.ax)
-        #plt.show(block=False)
-
-        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
-        rospy.Subscriber("odom", Odometry, self.odomCallback)
-
-        # Pose publisher, initialise message
-        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
-        self.pose_msg = Twist()
-        self.pose_msg.linear.x = x
-        self.pose_msg.linear.y = y
-        self.pose_msg.angular.z = yaw
-        # timer for pose publisher
-        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
-
-        # set initial position
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-
-        self.dict={}
-
-        self.counter = 0
-
-
-        # Initialise particle filter
-
-        self.pos_dict={}
-        self.pos_dict_count=0
-        self.pos_est_values=[]
-        self.pos_true_values=[]
-
-        self.true_x = 0
-        self.true_y = 0
-        self.true_yaw = 0
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.modelCB)
-
-        rospy.loginfo("Started particle filter node")
-        while not rospy.is_shutdown():
-            rospy.sleep(10)
-        return
-
-    def modelCB(self, msg):
-        j = 0
-        for i, s in enumerate(msg.name):
-            if s == "turtlebot3":
-                j = i
-        pose = msg.pose[j]
-        self.true_x = pose.position.x
-        self.true_y = pose.position.y
-        orientation = (
-            pose.orientation.x,
-            pose.orientation.y,
-            pose.orientation.z,
-            pose.orientation.w
-        )
-        self.true_yaw = tf.transformations.euler_from_quaternion(orientation)[2]
-        #rospy.loginfo(['True x: '+str(self.true_x)])
-        #rospy.loginfo(['True yaw: '+str(self.true_yaw)])
-
-    def scanCallback(self, msg):
-
-        # get the measurements for the specified number of points out of the scan information
-        indexes = np.rint(np.linspace(0, 360 - 360/self.nb_rays, self.nb_rays)).astype(int)
-        m = np.array(msg.ranges)
-        measure = m[indexes]
-
-        # update position estimation
-        self.poseEstimationUpdate(measure)
-        return
-
-    def odomCallback(self, msg):
-
-        # add the received position increment to the particles
-        vel = msg.twist.twist
-        self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
-
-        #for p in self.particle_filter.particles:
-        #    self.ax.scatter(p.x, p.y)
-        #    plt.draw()
-
-        values = [vel.linear.x, vel.linear.y, vel.angular.z]
-        self.dict.update({str(self.counter) : values})
-        self.counter+=1
-        self.dumpData("values.json")
-
-        return
-
-    def dumpData(self, file_path):
-        with open(file_path, 'w') as file:
-            json.dump(self.dict, file)
-
-    def poseEstimationUpdate(self, measurements):
-
-        self.particle_filter.measurementUpdate(measurements)
-        self.particle_filter.particleUpdate()
-        x, y, yaw = self.particle_filter.estimate()
-
-        rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
-
-        self.pos_true_values.append([self.true_x,self.true_y, self.true_yaw])
-        self.pos_est_values.append([x,y,yaw])
-        self.pos_dict_count+=1
-        rospy.loginfo(str(self.pos_dict_count)+'/50')
-        if self.pos_dict_count == MAX_VAL:
-            with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'pos_est_values.json'),'w') as file:
-
-                self.pos_dict.update({'NumPart': NUM_PARTICLES,'NumRays': NUM_RAYS, 'NoiseMove': NOISE_MOVE, 'NoiseTurn':NOISE_TURN,
-                    'NoiseSense':NOISE_SENSE,'Est': self.pos_est_values, 'True': self.pos_true_values})
-
-                json.dump(self.pos_dict, file)
-                print(os.getcwd())
-                rospy.loginfo("DATA SAVED!!!")
-
-        self.pose_msg.linear.x = x
-        self.pose_msg.linear.y = y
-        self.pose_msg.angular.z = yaw
-        return
-
-    def pubPose(self, event):
-        self.pose_pub.publish(self.pose_msg)
-        return
-
-    def __str__(self):
-        return "x {}, y {}, yaw {} ".format(self.x, self.y, self.yaw)
-
-    def setPose(self, x, y, yaw):
-        """
-        Sets a new pose for the robot.
-        input:
-        ------
-            - x: the new x position.
-            - y: the new y position.
-            - yaw: the new yaw angle.
-        output:
-        -------
-            None
-        """
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-        return
-
 def gaussian(mu, sigma, x):
     """
     Computes the probability of x w.r.t a gaussian law @f$(\mathcal{N}(/mu,/sigma^(2)))@f$
@@ -478,13 +263,3 @@ def gaussian(mu, sigma, x):
     - the probability of x.
     """
     return np.exp(- ((mu - x) ** 2) / (sigma ** 2) / 2.0) / np.sqrt(2.0 * np.pi * (sigma ** 2))
-
-def main():
-
-    rospack = rospkg.RosPack()
-    path = rospack.get_path('milestone2')
-    map = Map(path + MAP_FILE)
-    r = Robot(map, NUM_PARTICLES, INITIAL_X, INITIAL_Y, INITIAL_YAW, NUM_RAYS)
-
-if __name__ == "__main__":
-    main()

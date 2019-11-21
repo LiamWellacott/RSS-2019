@@ -10,7 +10,7 @@ class Arm:
     THRESHOLD = 0.1
     SPEED = 0.05
 
-    IDLE_SEQUENCE = [[0,0,0,0,0,0]]
+    IDLE_SEQUENCE = [[0,0,0,1.57,0,0]]
     PUSH_BUTTON_SEQUENCE = [[0, 0, -0.8, 0, 0, 0], IDLE_SEQUENCE[0]]
     MOVE_OBSTACLE_SEQUENCE = [[0, 0, -1.0, 0.5, 0, 0], [0, 1, -1, 0.5, 0, 0], [0, -1, -1, 0.5, 0, 0], IDLE_SEQUENCE[0]]
     PICKUP_PREPARE=[[0,0,-1.5,0,0.8,1]]
