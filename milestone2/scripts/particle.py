@@ -20,7 +20,7 @@ PUBLISH_RATE = 0.1
 ODOM_RATE = 30.
 
 NOISE_MOVE = 0.01
-NOISE_TURN = np.deg2rad(2)
+NOISE_TURN = np.deg2rad(0.1)
 NOISE_SENSE = 0.1
 
 SENSE_DIST = 0.06 # 6 cm offset between the wheel center and the sensor
@@ -157,7 +157,7 @@ class Particle(object):
 
         self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
         self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
-        
+
         return
 
 class ParticleFilter(object):
