@@ -69,7 +69,7 @@ class Controller(object):
         kh = 5
 
         vm = 0.26
-        wm = 1.82
+        wm = 0.80
 
         dx = pt[0] - self.pose[0]
         dy = pt[1] - self.pose[1]
@@ -93,8 +93,8 @@ class Controller(object):
 
         w = min(w, wm)
 
-        if self.first and np.abs(gamma) > 1e-1:
+        if self.first and np.abs(a) > 5:
             v = 0
-        elif self.first and np.abs(gamma) < 1e-1:
+        elif self.first and np.abs(a) < 5:
             self.first = False
         return v, w
