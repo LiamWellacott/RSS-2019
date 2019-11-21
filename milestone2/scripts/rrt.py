@@ -7,11 +7,12 @@ import tf
 
 import numpy as np
 import json
+from copy import copy as copy
+
 #import matplotlib
 #matplotlib.use('Agg')
 #import matplotlib.pyplot as plt
 #from matplotlib import collections as mc
-from copy import copy as copy
 
 from milestone2.srv import RRTsrv, RRTsrvResponse
 
@@ -24,11 +25,11 @@ from Queue import PriorityQueue
 RADIUS_OBSTACLE = 0.22
 RADIUS_TARGET = .08
 PLOT_RADIUS = .05
-RRT_EXTEND_DIST = .25 # 20 CM between two points at most
+RRT_EXTEND_DIST = .32 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
-MAP_FILE = "/maps/rss_offset.json"
+MAP_FILE = "/maps/rss_offset_box1.json"
 
 # fixed for repeatability
 np.random.seed(0)
@@ -113,6 +114,10 @@ class RRT(object):
         if not self.goalInGraph(goal):
             self.extendGraph(goal)
         path = self.astar(q_init, goal)
+
+        #path = np.array(path)
+        #np.save("path", path)
+
         path = self.smoothingPath(path)
         # Reshape the path to publish on in a single array, this should be reshaped
         # when recieved
@@ -315,7 +320,6 @@ class RRT(object):
                     fringe.put(child)
 
     def smoothingPath(self, path):
-
         for i in range(SMOOTHING_ITERATIONS):
             index1 = np.random.randint(0, len(path)-1)
             index2 = np.random.randint(0, len(path)-1)
@@ -335,6 +339,7 @@ class RRT(object):
         # Second smoothing, consist in having regularly spaced points and curving corners
         # TODO: define those variables as class constants.
         smooth_path = np.copy(path)
+        #np.save("path.np", smooth_path)
 
 
         path = np.array(path)
@@ -374,6 +379,7 @@ class RRT(object):
                     aux = smooth_path[i][j]
                     smooth_path[i][j] += weight_data * (new_path[i][j] - smooth_path[i][j]) + \
                         weight_smooth * (smooth_path[i-1][j] + smooth_path[i+1][j] - 2*smooth_path[i][j])
+
         return smooth_path
 
     def plotGraph(self, start=None, goal=None, sample=None, path=None):
