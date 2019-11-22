@@ -49,7 +49,7 @@ class Particle(object):
         self.x = x + np.random.rand()*x_pert
         self.y = y + np.random.rand()*y_pert
         self.yaw = yaw + np.random.rand()*yaw_pert
-        self.xSens = self.x - np.con(self.yaw)*SENSE_DIST
+        self.xSens = self.x - np.cos(self.yaw)*SENSE_DIST
         self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
 
         # Noise for sensing and moving
