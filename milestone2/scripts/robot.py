@@ -20,12 +20,13 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-#from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
 from milestone2.msg import Task
 
+import json
 
 #import matplotlib
 #matplotlib.use('Agg')
@@ -50,7 +51,12 @@ MAX_VAL = 150
 SCAN_HZ = 5.0
 CUTOFF = 1.0
 
-FILT_SAMPLES = 10
+FILT_SAMPLES = 4
+
+NOISE_MOVE = 0.02
+NOISE_TURN = np.deg2rad(1)
+NOISE_SENSE = 0.05
+
 
 class Robot(object):
     """
@@ -70,14 +76,14 @@ class Robot(object):
         # Initialise particle filter
         self.nb_rays = nb_rays
         self.map = map
-        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
+        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays, NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
 
         self.scanLen = 0
 
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
-        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         self.objectives = Queue()
@@ -107,6 +113,15 @@ class Robot(object):
         # Initialise controller
         self.controller = Controller()
         self.collision_avoidance = Avoid()
+
+
+        # Logging info
+        self.i = 0
+        self.log_dict = {}
+        self.MAX_LOG = 100
+        self.x_true = 0
+        self.y_true = 0
+        self.yaw_true = 0
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
@@ -201,15 +216,21 @@ class Robot(object):
             if s == "turtlebot3":
                 j = i
         pose = msg.pose[j]
-        self.x = pose.position.x
-        self.y = pose.position.y
+        self.x_true = pose.position.x
+        self.y_true = pose.position.y
         orientation = (
             pose.orientation.x,
             pose.orientation.y,
             pose.orientation.z,
             pose.orientation.w
         )
-        self.yaw = tf.transformations.euler_from_quaternion(orientation)[2]
+        self.yaw_true = tf.transformations.euler_from_quaternion(orientation)[2]
+
+        vel = msg.twist[j]
+
+        self.true_x_vel = vel.linear.x
+        self.true_y_vel = vel.linear.y
+        self.true_yaw_vel = vel.angular.z
 
     def scanCallback(self, msg):
         self.collision_avoidance.scanCallback(msg)
@@ -218,7 +239,7 @@ class Robot(object):
         m = np.array(msg.ranges)
         measure = m[indexes]
 
-        self.poseEstimationUpdate(measure)
+        #self.poseEstimationUpdate(measure)
 
 
         if self.scanLen == 0:
@@ -247,11 +268,19 @@ class Robot(object):
         self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
         return
 
-    def poseEstimationUpdate(self, measurements):
+    def imuCallback(self, msg):
+        return
 
-        self.particle_filter.measurementUpdate(measurements)
-        self.particle_filter.particleUpdate()
+
+    def poseEstimationUpdate(self, measurements):
+        # Update current weights
+        rays, w = self.particle_filter.measurementUpdate(measurements)
+        i = np.argmax(w)
+        ray = rays[i]
+        # Get Position according to the current max weight.
         x, y, yaw = self.particle_filter.estimate()
+        # Resample particles
+        self.particle_filter.particleUpdate()
 
         self.x = x
         self.y = y
@@ -261,6 +290,8 @@ class Robot(object):
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
+
+        self.logInfo(measurements, ray)
 
         return
 
@@ -302,6 +333,28 @@ class Robot(object):
         for i in range(1, len(x)):
             y[i] = alpha*x[i] + (1 - alpha)*y[i-1]
         return y[-1]
+
+    def logInfo(self, m, rays):
+        p = self.particle_filter.getPositions()
+        dict = {"{}rPose".format(self.i): [self.x, self.y, self.yaw],
+                "{}tPose".format(self.i): [self.x_true, self.y_true, self.yaw_true],
+                "{}pPose".format(self.i): p,
+                "{}rRay".format(self.i): rays,
+                "{}tScan".format(self.i): m.tolist()}
+
+        self.log_dict.update(dict)
+        if self.i < self.MAX_LOG:
+            rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
+        if self.i == self.MAX_LOG:
+            rospack = rospkg.RosPack()
+            path = rospack.get_path('milestone2')
+            file = path + "/loginfo/log{}_{}_{}.json".format(NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
+            with open(file, "w") as out_file:
+                json.dump(self.log_dict, out_file, indent=4)
+
+            rospy.loginfo("Data dumped")
+        self.i += 1
+
 
 def main():
 
