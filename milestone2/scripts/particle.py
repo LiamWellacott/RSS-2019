@@ -49,8 +49,8 @@ class Particle(object):
         self.x = x + np.random.rand()*x_pert
         self.y = y + np.random.rand()*y_pert
         self.yaw = yaw + np.random.rand()*yaw_pert
-        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
-        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
+        self.xSens = self.x - np.con(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
 
         # Noise for sensing and moving
         self.move_noise = 0
@@ -155,8 +155,8 @@ class Particle(object):
         self.x += np.random.uniform(-1, 1) * self.move_noise * np.cos(self.yaw)
         self.y += np.random.uniform(-1, 1) * self.move_noise * np.sin(self.yaw)
 
-        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
-        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
+        self.xSens = self.x - np.cos(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
 
         return
 
