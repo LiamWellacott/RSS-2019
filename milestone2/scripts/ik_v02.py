@@ -9,7 +9,7 @@ from sensor_msgs.msg import JointState
 class Arm:
 
     THRESHOLD = 0.02
-    SPEED = 0.4
+    SPEED = 0.005
     OPEN_GRIP=1.2
 
     IDLE_SEQUENCE = [np.array([0.1, 0.0, 0.4, OPEN_GRIP])]
@@ -56,7 +56,7 @@ class Arm:
     		return [np.array([x, y+0.1, 0.2, self.OPEN_GRIP]), np.array([x, y-0.1, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
 
     def pickup(self, x ,y):
-    	return [np.array([x-(0.02*np.cos(np.arctan(y/x))), y-(0.02*np.sin(np.arctan(y/x))), 0.05, self.OPEN_GRIP]), np.array([x, y, 0.05, 0.3]), np.array([x, y, 0.25, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+    	return [np.array([0.3, 0.0, 0.3, self.OPEN_GRIP]), np.array([x-(0.02*np.cos(np.arctan(y/x))), y-(0.02*np.sin(np.arctan(y/x))), 0.05, self.OPEN_GRIP]), np.array([x, y, 0.05, 0.335]), np.array([x, y, 0.25, 0.335]), self.IDLE_SEQUENCE[0]]
 
 
     def jointCallback(self, data):
@@ -178,7 +178,7 @@ class Arm:
         radTheta=np.dot(invJ,diff_xyz)
         directions = np.sign(radTheta)
 
-        grip_diff = (self.target_xyzg[3]-self.current_q[4])
+        grip_diff = (self.target_xyzg[3]-self.current_q[4])/1.2
 
 
         # TODO use the sensor values
@@ -187,6 +187,7 @@ class Arm:
         self.next_q[4]= self.current_q[4] + grip_diff
 #        for i in range(len(radTheta)):
 #            self.next_q[i] = self.current_q[i] + (directions[i]*self.SPEED)
+#        self.next_q[4]= self.current_q[4] + np.sign(grip_diff)*self.SPEED
 
         #rospy.loginfo(("Current xyzg: ", self.current_xyzg, "| Target: ", self.target_xyzg, "| Diff_xyz_ :",
          #diff_xyz_,"| Diff_xyz: ", diff_xyz , "| RadTheta:", radTheta, "| Next q: ", self.next_q))
@@ -262,7 +263,7 @@ def main():
         #arm.step()
 
         if arm._routineFinished() and once:
-            arm.startSequence(arm.pickup(0.25 ,0.1))
+            arm.startSequence(arm.pickup(0.2 ,0.1))
             once = False
 
 if __name__ == "__main__":
