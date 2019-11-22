@@ -19,9 +19,9 @@ PUBLISH_RATE = 0.1
 
 ODOM_RATE = 30.
 
-NOISE_MOVE = 0.01
-NOISE_TURN = np.deg2rad(0.1)
-NOISE_SENSE = 0.1
+NOISE_MOVE = 0.02
+NOISE_TURN = np.deg2rad(1)
+NOISE_SENSE = 0.05
 
 SENSE_DIST = 0.06 # 6 cm offset between the wheel center and the sensor
 
@@ -49,8 +49,8 @@ class Particle(object):
         self.x = x + np.random.rand()*x_pert
         self.y = y + np.random.rand()*y_pert
         self.yaw = yaw + np.random.rand()*yaw_pert
-        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
-        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
+        self.xSens = self.x - np.cos(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
 
         # Noise for sensing and moving
         self.move_noise = 0
@@ -103,23 +103,27 @@ class Particle(object):
             p(m|x)
         """
         prob = 1.0
+        d = []
         for i, angle in enumerate(np.linspace(self.yaw, self.yaw + np.pi - (2*np.pi/self.nb_rays), self.nb_rays/2)):
 
             # Get the minimum intersections in front and behind the robot at this angle
             points, distances = self.map.minIntersections(self, angle)
+            # debug info
+            d.append(distances)
 
             if points[0] is None or points[1] is None:
                     # no intersection found indicating the robot is outside the arena
                     # probability is 0 for whole robot
-                    return 0
+                    #return 0
+                    prob = 0
             else:
                 # calculate probability of measurement
                 prob *= self._filterMeasurement(distances[0], m[i])
                 prob *= self._filterMeasurement(distances[1], m[i + int(self.nb_rays/2)])
-                if prob == 0:
-                    return 0
+                #if prob == 0:
+                    #return 0
 
-        return prob
+        return prob, d
 
     def move(self, x_vel, y_vel, yaw_vel):
         """
@@ -155,8 +159,8 @@ class Particle(object):
         self.x += np.random.uniform(-1, 1) * self.move_noise * np.cos(self.yaw)
         self.y += np.random.uniform(-1, 1) * self.move_noise * np.sin(self.yaw)
 
-        self.xSens = self.x + np.sin(self.yaw)*SENSE_DIST
-        self.ySens = self.y - np.cos(self.yaw)*SENSE_DIST
+        self.xSens = self.x - np.cos(self.yaw)*SENSE_DIST
+        self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
 
         return
 
@@ -164,7 +168,9 @@ class ParticleFilter(object):
     """
     Particle filter class. Manages a set of particles.
     """
-    def __init__(self, map, nb_p, x = 0, y = 0, yaw = 0, nb_rays = 8):
+    def __init__(self, map, nb_p,
+                 x = 0, y = 0, yaw = 0, nb_rays = 8,
+                 m_noise=NOISE_MOVE, t_noise=NOISE_TURN, s_noise=NOISE_SENSE):
         """
         Initialize the set of paritcles.
         input:
@@ -182,7 +188,7 @@ class ParticleFilter(object):
         for _ in range(nb_p):
             p = Particle(map, x, y, yaw)
             # TODO estimate the std for the different operations
-            p.setNoise(NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
+            p.setNoise(m_noise, t_noise, s_noise)
             self.particles.append(p)
 
     def actionUpdate(self, x_vel, y_vel, yaw_vel):
@@ -208,10 +214,14 @@ class ParticleFilter(object):
         """
         # the set of weights
         w = []
+        ray = []
         for p in self.particles:
             # get the measurement probability for each particle
-            w.append(p.measureProb(mt))
+            prob, d = p.measureProb(mt)
+            ray.append(d)
+            w.append(prob)
         self.w = np.array(w)/np.sum(w)
+        return ray, w
 
     def particleUpdate(self):
         """
@@ -249,6 +259,12 @@ class ParticleFilter(object):
         #    y += self.w[i]*p.y
         #    yaw += self.w[i]*p.yaw
         return x, y, yaw
+
+    def getPositions(self):
+        pos = []
+        for p in self.particles:
+            pos.append((p.x, p.y, p.yaw))
+        return pos
 
 def gaussian(mu, sigma, x):
     """

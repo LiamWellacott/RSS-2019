@@ -4,8 +4,8 @@ import numpy as np
 import json
 from copy import copy as copy
 
-#import matplotlib.pyplot as plt
-#from matplotlib import collections as mc
+import matplotlib.pyplot as plt
+from matplotlib import collections as mc
 
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
@@ -107,11 +107,11 @@ class Map(object):
                 - a segment which passes through the world map with the robot at the halfway point
                 This allows us to calculate 2 data points with a single ray trace
         '''
-        end_x = np.cos(angle)*self.LENGTH + particle.x
-        end_y = np.sin(angle)*self.LENGTH + particle.y
+        end_x = np.cos(angle)*self.LENGTH + particle.xSens
+        end_y = np.sin(angle)*self.LENGTH + particle.ySens
 
-        start_x = -np.cos(angle)*self.LENGTH + particle.x
-        start_y = -np.sin(angle)*self.LENGTH + particle.y
+        start_x = -np.cos(angle)*self.LENGTH + particle.xSens
+        start_y = -np.sin(angle)*self.LENGTH + particle.ySens
 
         return Segment(np.array([start_x, start_y]), np.array([end_x, end_y]))
 
@@ -177,7 +177,7 @@ class Map(object):
             point = wall.p1 + t*wall.vec
 
             # measure distance to the point of intersection from the robot
-            dist = np.linalg.norm(point - np.array([particle.x, particle.y]))
+            dist = np.linalg.norm(point - np.array([particle.xSens, particle.ySens]))
 
             # if scalar is more than halfway (0.5) the obstacale is in front of robot, otherwise behind.
             # check if the newly found intersection is closer than previously measured points (for a given direction)
