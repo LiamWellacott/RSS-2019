@@ -21,7 +21,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-# from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
@@ -29,6 +29,7 @@ from milestone2.msg import Task
 
 import json
 
+import scipy.signal as sig
 #import matplotlib
 #matplotlib.use('Agg')
 #import matplotlib.pyplot as plt
@@ -50,19 +51,19 @@ PUBLISH_RATE = 0.1
 MAX_VAL = 150
 
 ODOM_HZ = 30.0
-CUTOFF_ODOM = .05
+CUTOFF_ODOM = 0.5
 
 SCAN_HZ = 5.0
 CUTOFF = 1.0
 
 POSE_HZ = 5.0
-POSE_CUTOFF = 4.0
+POSE_CUTOFF = 1.
 
 FILT_SAMPLES = 10
 
 NOISE_MOVE_X = 0.05
-NOISE_MOVE_Y = 0.01
-NOISE_TURN = np.deg2rad(10.)
+NOISE_MOVE_Y = 0.05
+NOISE_TURN = np.deg2rad(5.)
 NOISE_SENSE = 0.05
 
 
@@ -95,7 +96,7 @@ class Robot(object):
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
-        # rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         self.objectives = Queue()
@@ -114,8 +115,8 @@ class Robot(object):
         self.vel_msg = Twist()
         self.vel_msg.linear.x = 0
         self.vel_msg.angular.z = 0
-        self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
-        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubVel)
+        #self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
+        #rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubVel)
 
         # set initial position
         self.x = x
@@ -127,19 +128,18 @@ class Robot(object):
         self.collision_avoidance = Avoid()
 
         # Initialise arm
-        self.arm = Arm()
+        #self.arm = Arm()
 
         # Logging info
-        '''
+
         self.i = 0
         self.log_dict = {}
         self.o = 0
         self.odom_log = {}
-        self.MAX_LOG = 500
+        self.MAX_LOG = 100
         self.x_true = 0
         self.y_true = 0
         self.yaw_true = 0
-        '''
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
@@ -270,22 +270,32 @@ class Robot(object):
 
         #self.poseEstimationUpdate(measure)
 
-
+        if np.isinf(measure).any():
+            print("INF ENCOUTNERED")
+            sys.exit()
         if self.scan_len == 0:
+            if np.isnan(measure).any():
+                measure[measure==np.nan] = 0
             self.scan_buff = np.copy(measure.reshape(-1,1))
             self.scan_len += 1
 
         elif self.scan_len < FILT_SAMPLES:
+            if np.isnan(measure).any():
+                index = (measure == np.nan)
+                measure[index] = scan_buff[-1, index]
             self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
             self.scan_len += 1
 
         if self.scan_len >= FILT_SAMPLES:
+            if np.isnan(measure).any():
+                index = (measure == np.nan)
+                measure[index] = scan_buff[-1, index]
             self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
             self.scan_buff = self.scan_buff[:,1:]
 
 
             for i, ray in enumerate(self.scan_buff):
-                measure[i] = self.filter(ray, SCAN_HZ, CUTOFF)
+                measure[i] = self.lpf(ray, CUTOFF, SCAN_HZ)[-1]
             # update position estimation
             self.poseEstimationUpdate(measure)
 
@@ -311,11 +321,11 @@ class Robot(object):
 
 
             for i, v in enumerate(self.odom_buff):
-                vel[i] = self.filter(v, CUTOFF_ODOM, ODOM_HZ)
+                vel[i] = self.lpf(v, CUTOFF_ODOM, ODOM_HZ)[-1]
             # add the received position increment to the particles
 
             self.particle_filter.actionUpdate(vel[0], 0, vel[1])
-        #self.logInfoOdom(vel_before.tolist(), vel.tolist())
+            self.logInfoOdom(vel_before.tolist(), vel.tolist())
 
         return
 
@@ -348,14 +358,14 @@ class Robot(object):
 
 
             for i, s in enumerate(self.pose_buff):
-                state_a[i] = self.filter(s, POSE_HZ, POSE_CUTOFF)
+                state_a[i] = self.lpf(s, POSE_CUTOFF, POSE_HZ)[-1]
 
 
             self.x = state_a[0]
             self.y = state_a[1]
             self.yaw = state_a[2]
 
-        #self.logInfo(measurements, ray)
+        self.logInfo(measurements, ray)
         # Resample particles
         self.particle_filter.particleUpdate()
 
@@ -405,6 +415,33 @@ class Robot(object):
         for i in range(1, len(x)):
             y[i] = alpha*x[i] + (1 - alpha)*y[i-1]
         return y[-1]
+
+    def lpf(self, x, cutoff, fs, order=5):
+        """
+        low pass filters signal with Butterworth digital
+        filter according to cutoff frequency
+
+        filter uses Gustafsson's method to make sure
+        forward-backward filt == backward-forward filt
+
+        Note that edge effects are expected
+
+        Args:
+            x      (array): signal data (numpy array)
+            cutoff (float): cutoff frequency (Hz)
+            fs       (int): sample rate (Hz)
+            order    (int): order of filter (default 5)
+
+        Returns:
+            filtered (array): low pass filtered data
+        """
+        nyquist = fs / 2
+        b, a = sig.butter(order, cutoff / nyquist)
+        if not np.all(np.abs(np.roots(a)) < 1):
+            raise PsolaError('Filter with cutoff at {} Hz is unstable given '
+                             'sample frequency {} Hz'.format(cutoff, fs))
+        filtered = sig.filtfilt(b, a, x, method='gust')
+        return filtered
 
     def logInfo(self, m, rays):
         p = self.particle_filter.getPositions()
