@@ -4,6 +4,7 @@ import rospy
 import numpy as np
 import json
 from copy import copy as copy
+from copy import deepcopy as dc
 
 # Message types
 from sensor_msgs.msg import LaserScan
@@ -153,14 +154,20 @@ class Particle(object):
             self.y += x_vel*np.sin(self.yaw)*dt
             # yaw remains constant when no angular velocity
         # add some noise to the update
-        self.yaw += np.random.uniform(-1., 1.) * self.turn_noise
-        self.x += np.random.uniform(-1., 1.) * self.move_noise_x #* np.cos(self.yaw)
-        self.y += np.random.uniform(-1., 1.) * self.move_noise_y #* np.sin(self.yaw)
+        #self.yaw += np.random.uniform(-1., 1.) * self.turn_noise
+        #self.x += np.random.uniform(-1., 1.) * self.move_noise_x #* np.cos(self.yaw)
+        #self.y += np.random.uniform(-1., 1.) * self.move_noise_y #* np.sin(self.yaw)
 
         self.xSens = self.x - np.cos(self.yaw)*SENSE_DIST
         self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
 
         return
+
+    def perturb(self):
+        self.yaw += np.random.uniform(-1., 1.) * self.turn_noise
+        self.x += np.random.uniform(-1., 1.) * self.move_noise_x #* np.cos(self.yaw)
+        self.y += np.random.uniform(-1., 1.) * self.move_noise_y #* np.sin(self.yaw)
+
 
 class ParticleFilter(object):
     """
@@ -182,6 +189,8 @@ class ParticleFilter(object):
         self.x_est = x
         self.y_est = y
         self.yaw_est = yaw
+        # number of particles
+        self.nb_p = nb_p
 
         for _ in range(nb_p):
             p = Particle(map, x, y, yaw)
@@ -211,6 +220,13 @@ class ParticleFilter(object):
             none
         """
         # the set of weights
+        particles_ = dc(self.particles)
+
+        for p in particles_:
+            p.perturb()
+
+        self.particles += particles_
+
         w = []
         ray = []
         for p in self.particles:
@@ -219,6 +235,7 @@ class ParticleFilter(object):
             ray.append(d)
             w.append(prob)
         self.w = np.array(w)/np.sum(w)
+
         return ray, w
 
     def particleUpdate(self):
@@ -233,15 +250,16 @@ class ParticleFilter(object):
         """
         self.stochasticUniversalSampling()
 
-
     def resampling(self):
         # Resample TODO implement
+        N_max = self.nb_p
         N = len(self.particles)
         beta=0
         j=0
         w_max= max(self.w)
         p_temp=[]
-        for _ in range(N):
+
+        for _ in range(N_max):
             beta += 2.0*w_max*np.random.rand()
             while beta>self.w[j]:
                 beta -= self.w[j]
@@ -251,11 +269,12 @@ class ParticleFilter(object):
         self.particles = p_temp
 
     def stochasticUniversalSampling(self):
+        N_max = self.nb_p
         N = len(self.particles)
         beta = np.random.rand()/N
         index = 0
         p_temp = []
-        for i in range(N):
+        for i in range(N_max):
             beta += 1.0/N
             while beta>self.w[index]:
                 beta = beta - self.w[index]
