@@ -218,20 +218,18 @@ class Robot(object):
             rospy.loginfo("Smash button...")
             button = objective.objective
             buttonrobot = self._worldToRobotFrame(button)
-            self.pickUp(buttonrobot)
             self.smashButton(buttonrobot)
             rospy.loginfo("Button smashed")
-            returnParticleFilter
+            return
         elif task == "move":
             rospy.loginfo("move obstacle...")
             obstacle = objective.objective
             obstaclerobot = self._worldToRobotFrame(obstacle)
-            self.pickUp(obstaclerobot)
             self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
             return
         else:
-            rospy.logwaring("Couldn't indentify objective {}".format(task))
+            rospy.logwarning("Couldn't indentify objective {}".format(task))
 
     def followPath(self):
         while not self.controller.isDone(self.x, self.y):
