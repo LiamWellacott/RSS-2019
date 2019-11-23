@@ -21,12 +21,13 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-#from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
 from milestone2.msg import Task
 
+import json
 
 #import matplotlib
 #matplotlib.use('Agg')
@@ -48,10 +49,22 @@ PUBLISH_RATE = 0.1
 
 MAX_VAL = 150
 
+ODOM_HZ = 30.0
+CUTOFF_ODOM = .05
+
 SCAN_HZ = 5.0
 CUTOFF = 1.0
 
+POSE_HZ = 5.0
+POSE_CUTOFF = 4.0
+
 FILT_SAMPLES = 10
+
+NOISE_MOVE_X = 0.05
+NOISE_MOVE_Y = 0.01
+NOISE_TURN = np.deg2rad(10.)
+NOISE_SENSE = 0.05
+
 
 class Robot(object):
     """
@@ -71,14 +84,18 @@ class Robot(object):
         # Initialise particle filter
         self.nb_rays = nb_rays
         self.map = map
-        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays)
+        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays, NOISE_MOVE_X, NOISE_MOVE_Y, NOISE_TURN, NOISE_SENSE)
 
-        self.scanLen = 0
+        # filtering values
+        self.scan_len = 0
+        self.odom_len = 0
+        self.pose_len = 0
+
 
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
-        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         self.objectives = Queue()
@@ -111,6 +128,16 @@ class Robot(object):
 
         # Initialise arm
         self.arm = Arm()
+
+        # Logging info
+        self.i = 0
+        self.log_dict = {}
+        self.o = 0
+        self.odom_log = {}
+        self.MAX_LOG = 500
+        self.x_true = 0
+        self.y_true = 0
+        self.yaw_true = 0
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
@@ -218,15 +245,21 @@ class Robot(object):
             if s == "turtlebot3":
                 j = i
         pose = msg.pose[j]
-        self.x = pose.position.x
-        self.y = pose.position.y
+        self.x_true = pose.position.x
+        self.y_true = pose.position.y
         orientation = (
             pose.orientation.x,
             pose.orientation.y,
             pose.orientation.z,
             pose.orientation.w
         )
-        self.yaw = tf.transformations.euler_from_quaternion(orientation)[2]
+        self.yaw_true = tf.transformations.euler_from_quaternion(orientation)[2]
+
+        vel = msg.twist[j]
+
+        self.true_x_vel = vel.linear.x
+        self.true_y_vel = vel.linear.y
+        self.true_yaw_vel = vel.angular.z
 
     def scanCallback(self, msg):
         self.collision_avoidance.scanCallback(msg)
@@ -235,23 +268,23 @@ class Robot(object):
         m = np.array(msg.ranges)
         measure = m[indexes]
 
-        self.poseEstimationUpdate(measure)
+        #self.poseEstimationUpdate(measure)
 
 
-        if self.scanLen == 0:
-            self.scanBuff = np.copy(measure.reshape(-1,1))
-            self.scanLen += 1
+        if self.scan_len == 0:
+            self.scan_buff = np.copy(measure.reshape(-1,1))
+            self.scan_len += 1
 
-        elif self.scanLen < FILT_SAMPLES:
-            self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
-            self.scanLen += 1
+        elif self.scan_len < FILT_SAMPLES:
+            self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
+            self.scan_len += 1
 
-        if self.scanLen >= FILT_SAMPLES:
-            self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
-            self.scanBuff = self.scanBuff[:,1:]
+        if self.scan_len >= FILT_SAMPLES:
+            self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
+            self.scan_buff = self.scan_buff[:,1:]
 
 
-            for i, ray in enumerate(self.scanBuff):
+            for i, ray in enumerate(self.scan_buff):
                 measure[i] = self.filter(ray, SCAN_HZ, CUTOFF)
             # update position estimation
             self.poseEstimationUpdate(measure)
@@ -259,25 +292,79 @@ class Robot(object):
         return
 
     def odomCallback(self, msg):
-        # add the received position increment to the particles
+
         vel = msg.twist.twist
-        self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
+        vel = np.array([vel.linear.x, vel.angular.z])
+
+        vel_before = np.copy(vel)
+        '''
+        if self.odom_len == 0:
+            self.odom_buff = np.copy(vel.reshape(-1,1))
+            self.odom_len += 1
+
+        elif self.odom_len < FILT_SAMPLES:
+            self.odom_buff = np.hstack((self.odom_buff, vel.reshape(-1,1)))
+            self.odom_len += 1
+
+        if self.odom_len >= FILT_SAMPLES:
+            self.odom_buff = np.hstack((self.odom_buff, vel.reshape(-1,1)))
+            self.odom_buff = self.odom_buff[:,1:]
+
+
+            for i, v in enumerate(self.odom_buff):
+                vel[i] = self.filter(v, CUTOFF_ODOM, ODOM_HZ)
+            # add the received position increment to the particles
+        '''
+        self.particle_filter.actionUpdate(vel[0], 0, vel[1])
+        self.logInfoOdom(vel_before.tolist(), vel.tolist())
+
         return
 
+    def imuCallback(self, msg):
+        return
+
+
     def poseEstimationUpdate(self, measurements):
-
-        self.particle_filter.measurementUpdate(measurements)
-        self.particle_filter.particleUpdate()
+        # Update current weights
+        rays, w = self.particle_filter.measurementUpdate(measurements)
+        i = np.argmax(w)
+        ray = rays[i]
+        # Get Position according to the current max weight.
         x, y, yaw = self.particle_filter.estimate()
+        state_b = np.array([x, y, yaw])
+        state_a = np.array([x, y, yaw])
 
-        self.x = x
-        self.y = y
-        self.yaw = yaw
+        # Low pass filter on position
+        if self.pose_len == 0:
+            self.pose_buff = np.copy(state_b.reshape(-1,1))
+            self.pose_len += 1
+
+        elif self.pose_len < FILT_SAMPLES:
+            self.pose_buff = np.hstack((self.pose_buff, state_b.reshape(-1,1)))
+            self.pose_len += 1
+
+        if self.pose_len >= FILT_SAMPLES:
+            self.pose_buff = np.hstack((self.pose_buff, state_b.reshape(-1,1)))
+            self.pose_buff = self.pose_buff[:,1:]
+
+
+            for i, s in enumerate(self.pose_buff):
+                state_a[i] = self.filter(s, POSE_HZ, POSE_CUTOFF)
+
+
+            self.x = state_a[0]
+            self.y = state_a[1]
+            self.yaw = state_a[2]
+
+        self.logInfo(measurements, ray)
+        # Resample particles
+        self.particle_filter.particleUpdate()
 
         rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
+
 
         return
 
@@ -313,13 +400,50 @@ class Robot(object):
         return
 
     def filter(self, x, hz, fc):
-        alpha = 1. / (1. + 1. / 2.*np.pi*hz*fc)
+        alpha = 1. / (1. + 1. / (2.*np.pi*hz*fc))
         y = np.zeros(len(x))
         y[0] = x[0]
         for i in range(1, len(x)):
             y[i] = alpha*x[i] + (1 - alpha)*y[i-1]
         return y[-1]
 
+    def logInfo(self, m, rays):
+        p = self.particle_filter.getPositions()
+        dict = {"{}rPose".format(self.i): [self.x, self.y, self.yaw],
+                "{}tPose".format(self.i): [self.x_true, self.y_true, self.yaw_true],
+                "{}pPose".format(self.i): p,
+                "{}rRay".format(self.i): rays,
+                "{}tScan".format(self.i): m.tolist()}
+
+        self.log_dict.update(dict)
+        if self.i < self.MAX_LOG:
+            rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
+        if self.i == self.MAX_LOG:
+            rospack = rospkg.RosPack()
+            path = rospack.get_path('milestone2')
+            file = path + "/loginfo/log_{}_{}_{}_{}.json".format(NOISE_MOVE_X, NOISE_MOVE_Y, np.rad2deg(NOISE_TURN), NOISE_SENSE)
+            with open(file, "w") as out_file:
+                json.dump(self.log_dict, out_file, indent=4)
+
+            rospy.loginfo("Data dumped")
+        self.i += 1
+
+    def logInfoOdom(self, vel1, vel2):
+        dict = {"{}vel1".format(self.o): vel1,
+                "{}vel2".format(self.o): vel2}
+        self.odom_log.update(dict)
+        if self.o < self.MAX_LOG:
+            rospy.loginfo("{}/{}".format(self.o, self.MAX_LOG))
+        if self.o == self.MAX_LOG:
+            rospack = rospkg.RosPack()
+            path = rospack.get_path('milestone2')
+            file = path + "/loginfo/log_odom.json"
+            with open(file, "w") as out_file:
+                json.dump(self.odom_log, out_file, indent=4)
+
+            rospy.loginfo("Odom Data dumped")
+
+        self.o += 1
 def main():
 
     rospack = rospkg.RosPack()
