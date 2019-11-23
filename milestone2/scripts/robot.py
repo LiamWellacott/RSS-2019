@@ -48,13 +48,20 @@ PUBLISH_RATE = 0.1
 
 MAX_VAL = 150
 
+ODOM_HZ = 30.0
+CUTOFF_ODOM = .05
+
 SCAN_HZ = 5.0
 CUTOFF = 1.0
 
-FILT_SAMPLES = 4
+POSE_HZ = 5.0
+POSE_CUTOFF = 4.0
 
-NOISE_MOVE = 0.02
-NOISE_TURN = np.deg2rad(1)
+FILT_SAMPLES = 10
+
+NOISE_MOVE_X = 0.05
+NOISE_MOVE_Y = 0.01
+NOISE_TURN = np.deg2rad(10.)
 NOISE_SENSE = 0.05
 
 
@@ -76,9 +83,13 @@ class Robot(object):
         # Initialise particle filter
         self.nb_rays = nb_rays
         self.map = map
-        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays, NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
+        self.particle_filter = ParticleFilter(map, nb_p, x, y, yaw, nb_rays, NOISE_MOVE_X, NOISE_MOVE_Y, NOISE_TURN, NOISE_SENSE)
 
-        self.scanLen = 0
+        # filtering values
+        self.scan_len = 0
+        self.odom_len = 0
+        self.pose_len = 0
+
 
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
@@ -118,7 +129,9 @@ class Robot(object):
         # Logging info
         self.i = 0
         self.log_dict = {}
-        self.MAX_LOG = 100
+        self.o = 0
+        self.odom_log = {}
+        self.MAX_LOG = 500
         self.x_true = 0
         self.y_true = 0
         self.yaw_true = 0
@@ -242,20 +255,20 @@ class Robot(object):
         #self.poseEstimationUpdate(measure)
 
 
-        if self.scanLen == 0:
-            self.scanBuff = np.copy(measure.reshape(-1,1))
-            self.scanLen += 1
+        if self.scan_len == 0:
+            self.scan_buff = np.copy(measure.reshape(-1,1))
+            self.scan_len += 1
 
-        elif self.scanLen < FILT_SAMPLES:
-            self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
-            self.scanLen += 1
+        elif self.scan_len < FILT_SAMPLES:
+            self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
+            self.scan_len += 1
 
-        if self.scanLen >= FILT_SAMPLES:
-            self.scanBuff = np.hstack((self.scanBuff, measure.reshape(-1,1)))
-            self.scanBuff = self.scanBuff[:,1:]
+        if self.scan_len >= FILT_SAMPLES:
+            self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
+            self.scan_buff = self.scan_buff[:,1:]
 
 
-            for i, ray in enumerate(self.scanBuff):
+            for i, ray in enumerate(self.scan_buff):
                 measure[i] = self.filter(ray, SCAN_HZ, CUTOFF)
             # update position estimation
             self.poseEstimationUpdate(measure)
@@ -263,9 +276,32 @@ class Robot(object):
         return
 
     def odomCallback(self, msg):
-        # add the received position increment to the particles
+
         vel = msg.twist.twist
-        self.particle_filter.actionUpdate(vel.linear.x, vel.linear.y, vel.angular.z)
+        vel = np.array([vel.linear.x, vel.angular.z])
+
+        vel_before = np.copy(vel)
+        '''
+        if self.odom_len == 0:
+            self.odom_buff = np.copy(vel.reshape(-1,1))
+            self.odom_len += 1
+
+        elif self.odom_len < FILT_SAMPLES:
+            self.odom_buff = np.hstack((self.odom_buff, vel.reshape(-1,1)))
+            self.odom_len += 1
+
+        if self.odom_len >= FILT_SAMPLES:
+            self.odom_buff = np.hstack((self.odom_buff, vel.reshape(-1,1)))
+            self.odom_buff = self.odom_buff[:,1:]
+
+
+            for i, v in enumerate(self.odom_buff):
+                vel[i] = self.filter(v, CUTOFF_ODOM, ODOM_HZ)
+            # add the received position increment to the particles
+        '''
+        self.particle_filter.actionUpdate(vel[0], 0, vel[1])
+        self.logInfoOdom(vel_before.tolist(), vel.tolist())
+
         return
 
     def imuCallback(self, msg):
@@ -279,19 +315,40 @@ class Robot(object):
         ray = rays[i]
         # Get Position according to the current max weight.
         x, y, yaw = self.particle_filter.estimate()
+        state_b = np.array([x, y, yaw])
+        state_a = np.array([x, y, yaw])
+
+        # Low pass filter on position
+        if self.pose_len == 0:
+            self.pose_buff = np.copy(state_b.reshape(-1,1))
+            self.pose_len += 1
+
+        elif self.pose_len < FILT_SAMPLES:
+            self.pose_buff = np.hstack((self.pose_buff, state_b.reshape(-1,1)))
+            self.pose_len += 1
+
+        if self.pose_len >= FILT_SAMPLES:
+            self.pose_buff = np.hstack((self.pose_buff, state_b.reshape(-1,1)))
+            self.pose_buff = self.pose_buff[:,1:]
+
+
+            for i, s in enumerate(self.pose_buff):
+                state_a[i] = self.filter(s, POSE_HZ, POSE_CUTOFF)
+
+
+            self.x = state_a[0]
+            self.y = state_a[1]
+            self.yaw = state_a[2]
+
+        self.logInfo(measurements, ray)
         # Resample particles
         self.particle_filter.particleUpdate()
-
-        self.x = x
-        self.y = y
-        self.yaw = yaw
 
         rospy.logdebug("x = {}, y = {}, yaw = {}".format(x, y, yaw))
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
 
-        self.logInfo(measurements, ray)
 
         return
 
@@ -327,7 +384,7 @@ class Robot(object):
         return
 
     def filter(self, x, hz, fc):
-        alpha = 1. / (1. + 1. / 2.*np.pi*hz*fc)
+        alpha = 1. / (1. + 1. / (2.*np.pi*hz*fc))
         y = np.zeros(len(x))
         y[0] = x[0]
         for i in range(1, len(x)):
@@ -348,14 +405,29 @@ class Robot(object):
         if self.i == self.MAX_LOG:
             rospack = rospkg.RosPack()
             path = rospack.get_path('milestone2')
-            file = path + "/loginfo/log{}_{}_{}.json".format(NOISE_MOVE, NOISE_TURN, NOISE_SENSE)
+            file = path + "/loginfo/log_{}_{}_{}_{}.json".format(NOISE_MOVE_X, NOISE_MOVE_Y, np.rad2deg(NOISE_TURN), NOISE_SENSE)
             with open(file, "w") as out_file:
                 json.dump(self.log_dict, out_file, indent=4)
 
             rospy.loginfo("Data dumped")
         self.i += 1
 
+    def logInfoOdom(self, vel1, vel2):
+        dict = {"{}vel1".format(self.o): vel1,
+                "{}vel2".format(self.o): vel2}
+        self.odom_log.update(dict)
+        if self.o < self.MAX_LOG:
+            rospy.loginfo("{}/{}".format(self.o, self.MAX_LOG))
+        if self.o == self.MAX_LOG:
+            rospack = rospkg.RosPack()
+            path = rospack.get_path('milestone2')
+            file = path + "/loginfo/log_odom.json"
+            with open(file, "w") as out_file:
+                json.dump(self.odom_log, out_file, indent=4)
 
+            rospy.loginfo("Odom Data dumped")
+
+        self.o += 1
 def main():
 
     rospack = rospkg.RosPack()
