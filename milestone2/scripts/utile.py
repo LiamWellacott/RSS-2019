@@ -4,8 +4,8 @@ import numpy as np
 import json
 from copy import copy as copy
 
-# import matplotlib.pyplot as plt
-# from matplotlib import collections as mc
+#import matplotlib.pyplot as plt
+#from matplotlib import collections as mc
 
 # class using a vectorial represnetation for the segments
 # p1 the origin and p2 - p1 the orientation and length associated
