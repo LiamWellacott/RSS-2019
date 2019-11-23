@@ -19,10 +19,6 @@ PUBLISH_RATE = 0.1
 
 ODOM_RATE = 30.
 
-NOISE_MOVE = 0.02
-NOISE_TURN = np.deg2rad(1)
-NOISE_SENSE = 0.05
-
 SENSE_DIST = 0.06 # 6 cm offset between the wheel center and the sensor
 
 MIN_VALID_MEASUREMENT = 0.12
@@ -31,7 +27,7 @@ class Particle(object):
     """
     Particle class.
     """
-    def __init__(self, map, x, y, yaw, x_pert = 0, y_pert = 0, yaw_pert = 0, nb_rays = 8):
+    def __init__(self, map, x, y, yaw, x_pert = 0., y_pert = 0., yaw_pert = 0., nb_rays = 8):
         """
         Initializes a particle/robot.
         input:
@@ -53,9 +49,10 @@ class Particle(object):
         self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
 
         # Noise for sensing and moving
-        self.move_noise = 0
-        self.turn_noise = 0
-        self.sense_noise = 0
+        self.move_noise_x = 0.
+        self.move_noise_y = 0.
+        self.turn_noise = 0.
+        self.sense_noise = 0.
 
         # Number of rays used to get the measurements.
         self.nb_rays = nb_rays
@@ -68,7 +65,7 @@ class Particle(object):
     def __str__(self):
         return "x {}, y {}, yaw {} ".format(self.x, self.y, self.yaw)
 
-    def setNoise(self, move, turn, sense):
+    def setNoise(self, move_x, move_y, turn, sense):
         """
         Sets a new pose for the robot.
         input:
@@ -80,7 +77,8 @@ class Particle(object):
         -------
             None
         """
-        self.move_noise = move
+        self.move_noise_x = move_x
+        self.move_noise_y = move_y
         self.turn_noise = turn
         self.sense_noise = sense
         return
@@ -155,9 +153,9 @@ class Particle(object):
             self.y += x_vel*np.sin(self.yaw)*dt
             # yaw remains constant when no angular velocity
         # add some noise to the update
-        self.yaw += np.random.uniform(-1, 1) * self.turn_noise
-        self.x += np.random.uniform(-1, 1) * self.move_noise * np.cos(self.yaw)
-        self.y += np.random.uniform(-1, 1) * self.move_noise * np.sin(self.yaw)
+        self.yaw += np.random.uniform(-1., 1.) * self.turn_noise
+        self.x += np.random.uniform(-1., 1.) * self.move_noise_x #* np.cos(self.yaw)
+        self.y += np.random.uniform(-1., 1.) * self.move_noise_y #* np.sin(self.yaw)
 
         self.xSens = self.x - np.cos(self.yaw)*SENSE_DIST
         self.ySens = self.y - np.sin(self.yaw)*SENSE_DIST
@@ -170,7 +168,7 @@ class ParticleFilter(object):
     """
     def __init__(self, map, nb_p,
                  x = 0, y = 0, yaw = 0, nb_rays = 8,
-                 m_noise=NOISE_MOVE, t_noise=NOISE_TURN, s_noise=NOISE_SENSE):
+                 m_noise_x=0.1, m_noise_y=0.01, t_noise=0.2, s_noise=0.02):
         """
         Initialize the set of paritcles.
         input:
@@ -188,7 +186,7 @@ class ParticleFilter(object):
         for _ in range(nb_p):
             p = Particle(map, x, y, yaw)
             # TODO estimate the std for the different operations
-            p.setNoise(m_noise, t_noise, s_noise)
+            p.setNoise(m_noise_x, m_noise_y, t_noise, s_noise)
             self.particles.append(p)
 
     def actionUpdate(self, x_vel, y_vel, yaw_vel):
@@ -233,6 +231,10 @@ class ParticleFilter(object):
         -------
             None
         """
+        self.stochasticUniversalSampling()
+
+
+    def resampling(self):
         # Resample TODO implement
         N = len(self.particles)
         beta=0
@@ -245,6 +247,20 @@ class ParticleFilter(object):
                 beta -= self.w[j]
                 j=(j + 1) % N
             selectedParticle = copy(self.particles[j])
+            p_temp.append(selectedParticle) # if beta<w[index], this indexed particle is selected
+        self.particles = p_temp
+
+    def stochasticUniversalSampling(self):
+        N = len(self.particles)
+        beta = np.random.rand()/N
+        index = 0
+        p_temp = []
+        for i in range(N):
+            beta += 1.0/N
+            while beta>self.w[index]:
+                beta = beta - self.w[index]
+                index= (index + 1) % N
+            selectedParticle = copy(self.particles[index])
             p_temp.append(selectedParticle) # if beta<w[index], this indexed particle is selected
         self.particles = p_temp
 
