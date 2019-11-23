@@ -21,7 +21,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-from gazebo_msgs.msg import ModelStates
+#from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
@@ -29,7 +29,7 @@ from milestone2.msg import Task
 
 import json
 
-import scipy.signal as sig
+#import scipy.signal as sig
 #import matplotlib
 #matplotlib.use('Agg')
 #import matplotlib.pyplot as plt
@@ -44,7 +44,7 @@ INITIAL_YAW = np.pi
 MAP_FILE = "/maps/rss_offset_box1.json"
 
 NUM_RAYS = 8
-NUM_PARTICLES = 25
+NUM_PARTICLES = 20
 
 PUBLISH_RATE = 0.1
 
@@ -59,11 +59,11 @@ CUTOFF = 1.0
 POSE_HZ = 5.0
 POSE_CUTOFF = 1.
 
-FILT_SAMPLES = 10
+FILT_SAMPLES = 5
 
-NOISE_MOVE_X = 0.05
-NOISE_MOVE_Y = 0.05
-NOISE_TURN = np.deg2rad(5.)
+NOISE_MOVE_X = 0.1
+NOISE_MOVE_Y = 0.1
+NOISE_TURN = np.deg2rad(10.)
 NOISE_SENSE = 0.05
 
 
@@ -96,7 +96,7 @@ class Robot(object):
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         self.objectives = Queue()
@@ -270,26 +270,41 @@ class Robot(object):
 
         #self.poseEstimationUpdate(measure)
 
-        if np.isinf(measure).any():
-            print("INF ENCOUTNERED")
-            sys.exit()
+        '''
         if self.scan_len == 0:
+
             if np.isnan(measure).any():
                 measure[measure==np.nan] = 0
+
+            if np.isinf(measure).any():
+                measure[measure==np.inf] = 0
+
             self.scan_buff = np.copy(measure.reshape(-1,1))
             self.scan_len += 1
 
         elif self.scan_len < FILT_SAMPLES:
+
             if np.isnan(measure).any():
                 index = (measure == np.nan)
-                measure[index] = scan_buff[-1, index]
+                measure[index] = self.scan_buff[-1, index]
+
+            if np.isinf(measure).any():
+                index = (measure == np.inf)
+                measure[index] = self.scan_buff[-1, index]
+
             self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
             self.scan_len += 1
 
         if self.scan_len >= FILT_SAMPLES:
+
             if np.isnan(measure).any():
                 index = (measure == np.nan)
-                measure[index] = scan_buff[-1, index]
+                measure[index] = self.scan_buff[-1, index]
+
+            if np.isinf(measure).any():
+                index = (measure == np.inf)
+                measure[index] = self.scan_buff[-1, index]
+
             self.scan_buff = np.hstack((self.scan_buff, measure.reshape(-1,1)))
             self.scan_buff = self.scan_buff[:,1:]
 
@@ -297,7 +312,8 @@ class Robot(object):
             for i, ray in enumerate(self.scan_buff):
                 measure[i] = self.lpf(ray, CUTOFF, SCAN_HZ)[-1]
             # update position estimation
-            self.poseEstimationUpdate(measure)
+            '''
+        self.poseEstimationUpdate(measure)
 
         return
 
@@ -306,6 +322,7 @@ class Robot(object):
         vel = msg.twist.twist
         vel = np.array([vel.linear.x, vel.angular.z])
 
+        '''
         vel_before = np.copy(vel)
         if self.odom_len == 0:
             self.odom_buff = np.copy(vel.reshape(-1,1))
@@ -324,14 +341,11 @@ class Robot(object):
                 vel[i] = self.lpf(v, CUTOFF_ODOM, ODOM_HZ)[-1]
             # add the received position increment to the particles
 
-            self.particle_filter.actionUpdate(vel[0], 0, vel[1])
-            self.logInfoOdom(vel_before.tolist(), vel.tolist())
+        '''
+        self.particle_filter.actionUpdate(vel[0], 0, vel[1])
+        #self.logInfoOdom(vel_before.tolist(), vel.tolist())
 
         return
-
-    def imuCallback(self, msg):
-        return
-
 
     def poseEstimationUpdate(self, measurements):
         # Update current weights
@@ -344,6 +358,7 @@ class Robot(object):
         state_a = np.array([x, y, yaw])
 
         # Low pass filter on position
+        '''
         if self.pose_len == 0:
             self.pose_buff = np.copy(state_b.reshape(-1,1))
             self.pose_len += 1
@@ -359,11 +374,10 @@ class Robot(object):
 
             for i, s in enumerate(self.pose_buff):
                 state_a[i] = self.lpf(s, POSE_CUTOFF, POSE_HZ)[-1]
-
-
-            self.x = state_a[0]
-            self.y = state_a[1]
-            self.yaw = state_a[2]
+        '''
+        self.x = state_a[0]
+        self.y = state_a[1]
+        self.yaw = state_a[2]
 
         self.logInfo(measurements, ray)
         # Resample particles
