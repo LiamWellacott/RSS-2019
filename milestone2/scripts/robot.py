@@ -20,7 +20,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-from gazebo_msgs.msg import ModelStates
+# from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
@@ -94,7 +94,7 @@ class Robot(object):
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
-        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        # rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         self.objectives = Queue()
@@ -127,6 +127,7 @@ class Robot(object):
 
 
         # Logging info
+        '''
         self.i = 0
         self.log_dict = {}
         self.o = 0
@@ -135,6 +136,7 @@ class Robot(object):
         self.x_true = 0
         self.y_true = 0
         self.yaw_true = 0
+        '''
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
@@ -281,7 +283,6 @@ class Robot(object):
         vel = np.array([vel.linear.x, vel.angular.z])
 
         vel_before = np.copy(vel)
-        '''
         if self.odom_len == 0:
             self.odom_buff = np.copy(vel.reshape(-1,1))
             self.odom_len += 1
@@ -298,9 +299,9 @@ class Robot(object):
             for i, v in enumerate(self.odom_buff):
                 vel[i] = self.filter(v, CUTOFF_ODOM, ODOM_HZ)
             # add the received position increment to the particles
-        '''
-        self.particle_filter.actionUpdate(vel[0], 0, vel[1])
-        self.logInfoOdom(vel_before.tolist(), vel.tolist())
+
+            self.particle_filter.actionUpdate(vel[0], 0, vel[1])
+        #self.logInfoOdom(vel_before.tolist(), vel.tolist())
 
         return
 
@@ -340,7 +341,7 @@ class Robot(object):
             self.y = state_a[1]
             self.yaw = state_a[2]
 
-        self.logInfo(measurements, ray)
+        #self.logInfo(measurements, ray)
         # Resample particles
         self.particle_filter.particleUpdate()
 
@@ -357,9 +358,9 @@ class Robot(object):
         return
 
     def pubVel(self, event):
-        if not self.collision_avoidance.isOK():
-            self.vel_msg.linear.x = 0
-            self.vel_msg.angular.z = self.collision_avoidance.turn()
+        #if not self.collision_avoidance.isOK():
+        #    self.vel_msg.linear.x = 0
+        #    self.vel_msg.angular.z = self.collision_avoidance.turn()
         self.vel_pub.publish(self.vel_msg)
         return
 
