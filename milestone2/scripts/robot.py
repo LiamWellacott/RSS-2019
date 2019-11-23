@@ -14,6 +14,7 @@ from utile import Map
 from controller import Controller
 from particle import ParticleFilter
 from avoid import Avoid
+from ik_v02 import Arm
 
 # Message types
 from sensor_msgs.msg import LaserScan
@@ -125,6 +126,8 @@ class Robot(object):
         self.controller = Controller()
         self.collision_avoidance = Avoid()
 
+        # Initialise arm
+        self.arm = Arm()
 
         # Logging info
         '''
@@ -174,16 +177,27 @@ class Robot(object):
             return
 
     def pickUp(self, sample):
-        # TODO implement handler
+        # Sample[0] and sample[1] should be the target's coordinates in weedle's frame
+        arm.startSequence(arm.pickup(sample[0] , sample[1]))
         return
 
     def smashButton(self, button):
-        # TODO implement handler
+        # Button[0] and Button[1] should be the target's coordinates in weedle's frame
+        arm.startSequence(arm.push_button(button[0] , button[1]))
         return
 
     def moveObst(self, obstacle):
-        # TODO implement handler
+        # Objective[0] and Objective[1] should be the target's coordinates in weedle's frame
+        arm.startSequence(arm.move_obstacle(obstacle[0] , obstacle[1]))
         return
+
+    def _worldToRobotFrame(self, coordinates):
+        xdiff = coordinates[0] - self.x
+        ydiff = coordaintes[1] - self.y
+
+        xrobot = xdiff*np.cos(self.yaw) + ydiff*np.sin(self.yaw)
+        yrobot = ydiff*np.cos(self.yaw) - xdiff*np.sin(self.yaw)
+        return [xrobot, yrobot]
 
     def objectiveHandler(self, objective):
         task = objective.task
@@ -196,22 +210,24 @@ class Robot(object):
         elif task == "pick":
             rospy.loginfo("Pick up sample...")
             sample = objective.objective
-            # TODO implement handler
-            self.pickUp(sample)
+            samplerobot = self._worldToRobotFrame(sample)
+            self.pickUp(samplerobot)
             rospy.loginfo("Sample collected")
             return
         elif task == "smash":
             rospy.loginfo("Smash button...")
             button = objective.objective
-            # TODO implement handler
-            self.smashButton(button)
+            buttonrobot = self._worldToRobotFrame(button)
+            self.pickUp(buttonrobot)
+            self.smashButton(buttonrobot)
             rospy.loginfo("Button smashed")
-            return
+            returnParticleFilter
         elif task == "move":
             rospy.loginfo("move obstacle...")
             obstacle = objective.objective
-            # TODO implement handler
-            self.moveObst(obstacle)
+            obstaclerobot = self._worldToRobotFrame(obstacle)
+            self.pickUp(obstaclerobot)
+            self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
             return
         else:
