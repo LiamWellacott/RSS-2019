@@ -6,12 +6,12 @@ import json
 import sys
 import numpy as np
 
-MAP_FILE = "maps/rss_offset.json"
-MAX_LOG = 100
+MAP_FILE = "maps/rss_offset_box1.json"
+MAX_LOG = 500
 map = Map(MAP_FILE)
 
 
-def parseFile(file):
+def parseFileParticle(file):
     fig, ax = plt.subplots()
     plt.show(block=False)
     with open(file) as json_file:
@@ -43,28 +43,28 @@ def parseFile(file):
             r_ = data["{}rPose".format(i)]
             t_ = data["{}tPose".format(i)]
 
+            if i % 10 == 0:
+                ax.clear()
+                fig, ax = map.plotMap(fig, ax)
 
-            ax.clear()
-            fig, ax = map.plotMap(fig, ax)
+                # Plotting robot position
+                ax.scatter(r_[0], r_[1], c='r', s=200)
 
-            # Plotting robot position
-            ax.scatter(r_[0], r_[1], c='r', s=200)
+                ax.quiver(r_[0], r_[1], .00001, .00001, angles=[np.rad2deg(r_[2])], scale=1./10000., scale_units="xy",
+                        units="xy", color="k", pivot="mid",width=0.01, headwidth=0.1, headlength=0.1)
 
-            ax.quiver(r_[0], r_[1], .00001, .00001, angles=[np.rad2deg(r_[2])], scale=1./10000., scale_units="xy",
+                ax.scatter(t_[0], t_[1], c='g', s=200)
+
+                ax.quiver(t_[0], t_[1], .00001, .00001, angles=[np.rad2deg(t_[2])], scale=1./10000., scale_units="xy",
                        units="xy", color="k", pivot="mid",width=0.01, headwidth=0.1, headlength=0.1)
 
-            ax.scatter(t_[0], t_[1], c='g', s=200)
 
-            ax.quiver(t_[0], t_[1], .00001, .00001, angles=[np.rad2deg(t_[2])], scale=1./10000., scale_units="xy",
-                       units="xy", color="k", pivot="mid",width=0.01, headwidth=0.1, headlength=0.1)
-
-
-            for p in particles:
-                ax.scatter(p[0], p[1], c='b')
-                ax.quiver(p[0], p[1], .000005, .000005, angles=[np.rad2deg(p[2])], scale=1./10000., scale_units="xy",
+                for p in particles:
+                    ax.scatter(p[0], p[1], c='b')
+                    ax.quiver(p[0], p[1], .000005, .000005, angles=[np.rad2deg(p[2])], scale=1./10000., scale_units="xy",
                            units="xy", color="y", pivot="mid",width=0.001, headwidth=0.001, headlength=0.00005)
-            plt.draw()
-            plt.pause(0.01)
+                plt.draw()
+                plt.pause(0.01)
 
     r = np.array(r)
     t = np.array(t)
@@ -121,10 +121,28 @@ def parseFile(file):
     '''
     plt.show()
 
+def parseFileOdom(file):
+    before = []
+    after = []
+    with open(file) as json_file:
+        data = json.load(json_file)
+        for i in range(MAX_LOG):
+            before.append(data["{}vel1".format(i)])
+            after.append(data["{}vel2".format(i)])
+    before = np.array(before)
+    after = np.array(after)
+    fig, ax = plt.subplots(2)
+    x = range(MAX_LOG)
+    ax[0].plot(x, before[:, 0], 'r')
+    ax[0].plot(x, after[:, 0], 'b')
+    ax[1].plot(x, before[:, 1], 'r')
+    ax[1].plot(x, after[:, 1], 'b')
+    plt.show()
+
 def main():
     json_file = sys.argv[1]
-    parseFile(json_file)
-
+    #parseFileOdom(json_file)
+    parseFileParticle(json_file)
 
 if __name__ == '__main__':
     main()
