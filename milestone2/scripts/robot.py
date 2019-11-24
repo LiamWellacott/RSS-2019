@@ -194,6 +194,20 @@ class Robot(object):
             print("Service call failed: %s"%e)
             return
 
+    def turn(self, target):
+        r = rospy.Rate(PUBLISH_RATE)
+        while not self.controller.isDoneAngle(target, [self.x, self.y], self.yaw):
+            w = self.controller.align(target, [self.x, self.y], self.yaw)
+            self.vel_msg.linear.x = 0
+            self.vel_msg.angular.z = w
+            self.pubVel()
+            r.sleep()
+
+        # stop moving
+        self.vel_msg.linear.x = 0
+        self.vel_msg.angular.z = 0
+        self.pubVel()
+
     def pickUp(self, sample):
         # Sample[0] and sample[1] should be the target's coordinates in weedle's frame
         self.arm.startSequence(self.arm.pickup(sample[0] , sample[1]))
@@ -231,12 +245,14 @@ class Robot(object):
         elif task == "pick":
             rospy.loginfo("Pick up sample...")
             sample = objective.objective
+            self.turn(sample)
             samplerobot = self._worldToRobotFrame(sample)
             self.pickUp(samplerobot)
             rospy.loginfo("Sample collected")
             return
         elif task == "smash":
             button = objective.objective
+            self.turn(button)
             rospy.loginfo("Smash button at ({};{}) from position ({}; {})...".format(button[0], button[1], self.x, self.y))
             buttonrobot = self._worldToRobotFrame(button)
             self.smashButton(buttonrobot)
@@ -245,6 +261,7 @@ class Robot(object):
         elif task == "move":
             rospy.loginfo("move obstacle...")
             obstacle = objective.objective
+            self.turn(obstacle)
             obstaclerobot = self._worldToRobotFrame(obstacle)
             self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
