@@ -131,7 +131,6 @@ class Robot(object):
         self.arm = Arm()
 
         # Logging info
-
         self.i = 0
         self.log_dict = {}
         self.o = 0
@@ -178,22 +177,22 @@ class Robot(object):
 
     def pickUp(self, sample):
         # Sample[0] and sample[1] should be the target's coordinates in weedle's frame
-        arm.startSequence(arm.pickup(sample[0] , sample[1]))
+        self.arm.startSequence(self.arm.pickup(sample[0] , sample[1]))
         return
 
     def smashButton(self, button):
         # Button[0] and Button[1] should be the target's coordinates in weedle's frame
-        arm.startSequence(arm.push_button(button[0] , button[1]))
+        self.arm.startSequence(self.arm.push_button(button[0] , button[1]))
         return
 
     def moveObst(self, obstacle):
         # Objective[0] and Objective[1] should be the target's coordinates in weedle's frame
-        arm.startSequence(arm.move_obstacle(obstacle[0] , obstacle[1]))
+        self.arm.startSequence(self.arm.move_obstacle(obstacle[0] , obstacle[1]))
         return
 
     def _worldToRobotFrame(self, coordinates):
         xdiff = coordinates[0] - self.x
-        ydiff = coordaintes[1] - self.y
+        ydiff = coordinates[1] - self.y
 
         xrobot = xdiff*np.cos(self.yaw) + ydiff*np.sin(self.yaw)
         yrobot = ydiff*np.cos(self.yaw) - xdiff*np.sin(self.yaw)
@@ -494,6 +493,7 @@ class Robot(object):
             rospy.loginfo("Odom Data dumped")
 
         self.o += 1
+
 def main():
 
     rospack = rospkg.RosPack()
