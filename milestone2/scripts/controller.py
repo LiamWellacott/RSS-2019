@@ -98,3 +98,27 @@ class Controller(object):
         elif self.first and np.abs(a) < 5:
             self.first = False
         return v, w
+
+    def isDoneAngle(self, pt_target, pose, yaw):
+        dx = pt_target[0] - pose[0]
+        dy = pt_target[1] - pose[1]
+        teta = math.atan2(dy, dx)
+        a = (teta - yaw)
+        a = ((a + np.pi) % (2*np.pi)) - np.pi
+        if a < 1e-1:
+            return True
+        return False
+
+    def align(self, pt_target, pose, yaw):
+        kh = 5
+        wm = 0.80
+
+        dx = pt_target[0] - pose[0]
+        dy = pt_target[1] - pose[1]
+        teta = math.atan2(dy, dx)
+        a = (teta - yaw)
+        a = ((a + np.pi) % (2*np.pi)) - np.pi
+        w = kh*a
+        w = min(w, wm)
+
+        return w
