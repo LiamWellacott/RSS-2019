@@ -42,9 +42,9 @@ INITIAL_Y = 1.50
 INITIAL_YAW = np.pi
 PATH = [
         [[3.80, 1.5], [3.85, 1.7], [3.90, 1.9], [3.95, 2.1], [4.0, 2.70]], 
-        [[3.9, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]], 
+        [[3.9-0.1, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]], 
         [[0.5, 2.], [0.5, 1.5], [0.5, 1.], [0.5, 0.80]],
-        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [3.80, 1.5]]
+        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [3.90, 1.5]]
         ]
 
 # relative path from package directory
@@ -246,6 +246,7 @@ class Robot(object):
             rospy.loginfo("Pick up sample...")
             sample = objective.objective
             self.turn(sample)
+            rospy.sleep(1)
             samplerobot = self._worldToRobotFrame(sample)
             self.pickUp(samplerobot)
             rospy.loginfo("Sample collected")
@@ -253,6 +254,7 @@ class Robot(object):
         elif task == "smash":
             button = objective.objective
             self.turn(button)
+            rospy.sleep(1)
             rospy.loginfo("Smash button at ({};{}) from position ({}; {})...".format(button[0], button[1], self.x, self.y))
             buttonrobot = self._worldToRobotFrame(button)
             self.smashButton(buttonrobot)
@@ -262,6 +264,7 @@ class Robot(object):
             rospy.loginfo("move obstacle...")
             obstacle = objective.objective
             self.turn(obstacle)
+            rospy.sleep(1)
             obstaclerobot = self._worldToRobotFrame(obstacle)
             self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
@@ -509,24 +512,27 @@ class Robot(object):
         return filtered
 
     def logInfo(self, m, rays):
-        p = self.particle_filter.getPositions()
-        dict = {"{}rPose".format(self.i): [self.x, self.y, self.yaw],
-                "{}tPose".format(self.i): [self.x_true, self.y_true, self.yaw_true],
-                "{}pPose".format(self.i): p,
-                "{}rRay".format(self.i): rays,
-                "{}tScan".format(self.i): m.tolist()}
 
-        self.log_dict.update(dict)
-        #if self.i < self.MAX_LOG:
-            #rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
-        if self.i == self.MAX_LOG:
-            rospack = rospkg.RosPack()
-            path = rospack.get_path('milestone2')
-            file = path + "/loginfo/log_{}_{}_{}_{}.json".format(NOISE_MOVE_X, NOISE_MOVE_Y, np.rad2deg(NOISE_TURN), NOISE_SENSE)
-            with open(file, "w") as out_file:
-                json.dump(self.log_dict, out_file, indent=4)
+        offset = 500
+        if self.i > offset:
+            p = self.particle_filter.getPositions()
+            dict = {"{}rPose".format(self.i): [self.x, self.y, self.yaw],
+                    "{}tPose".format(self.i): [self.x_true, self.y_true, self.yaw_true],
+                    "{}pPose".format(self.i): p,
+                    "{}rRay".format(self.i): rays,
+                    "{}tScan".format(self.i): m.tolist()}
 
-            rospy.loginfo("Data dumped")
+            self.log_dict.update(dict)
+            #if self.i < self.MAX_LOG:
+                #rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
+            if self.i == self.MAX_LOG + offset:
+                rospack = rospkg.RosPack()
+                path = rospack.get_path('milestone2')
+                file = path + "/loginfo/log_{}_{}_{}_{}.json".format(NOISE_MOVE_X, NOISE_MOVE_Y, np.rad2deg(NOISE_TURN), NOISE_SENSE)
+                with open(file, "w") as out_file:
+                    json.dump(self.log_dict, out_file, indent=4)
+
+                rospy.loginfo("Data dumped")
         self.i += 1
 
     def logInfoOdom(self, vel1, vel2):

@@ -27,7 +27,7 @@ class Arm:
         self.l6=0.1265
 
         # Create rosnode for controller
-        #rospy.init_node("arm_control", anonymous=True)
+        rospy.init_node("arm_control", anonymous=True)
 
         self.current_q = [0.,0.,0.,0., self.OPEN_GRIP] # need an inital until first val is sent to us
 
@@ -51,9 +51,9 @@ class Arm:
     def move_obstacle(self, x, y):
     	#Push objects to the right if objects are already to weedle's right and vice versa
     	if y>=0.0:
-    		return [np.array([x, y-0.1, 0.2, self.OPEN_GRIP]), np.array([x, y+0.1, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+    		return [np.array([x, y-0.15, 0.2, self.OPEN_GRIP]), np.array([x, y+0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
     	else:
-    		return [np.array([x, y+0.1, 0.2, self.OPEN_GRIP]), np.array([x, y-0.1, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+    		return [np.array([x, y+0.15, 0.2, self.OPEN_GRIP]), np.array([x, y-0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
 
     def pickup(self, x ,y):
     	return [np.array([0.3, 0.0, 0.3, self.OPEN_GRIP]), np.array([x-(0.02*np.cos(np.arctan(y/x))), y-(0.02*np.sin(np.arctan(y/x))), 0.05, self.OPEN_GRIP]), np.array([x, y, 0.05, 0.335]), np.array([x, y, 0.25, 0.335]), self.IDLE_SEQUENCE[0]]
@@ -267,7 +267,7 @@ def main():
         #arm.step()
 
         if arm._routineFinished() and once:
-            arm.startSequence(arm.push_button(0.28 ,0.))
+            arm.startSequence(arm.move_obstacle(0.28 ,0.))
             once = False
 
 if __name__ == "__main__":

@@ -105,12 +105,12 @@ class Controller(object):
         teta = math.atan2(dy, dx)
         a = (teta - yaw)
         a = ((a + np.pi) % (2*np.pi)) - np.pi
-        if a < np.abs(np.rad2deg(5)):
+        if np.abs(a) < np.abs(np.deg2rad(5)):
             return True
         return False
 
     def align(self, pt_target, pose, yaw):
-        kh = 5
+        kh = 1
         wm = 0.80
 
         dx = pt_target[0] - pose[0]
