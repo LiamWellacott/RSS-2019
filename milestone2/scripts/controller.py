@@ -68,8 +68,8 @@ class Controller(object):
         kd = 0.1
         kh = 5
 
-        vm = 0.10
-        wm = 0.80
+        vm = 0.05
+        wm = 0.4
 
         dx = pt[0] - self.pose[0]
         dy = pt[1] - self.pose[1]

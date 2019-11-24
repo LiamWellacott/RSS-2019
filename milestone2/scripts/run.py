@@ -20,12 +20,13 @@ def main():
 
     # Go to the button
     p1 = poi['Button']
-    p1_ = [p1[0], p1[1] - 0.35]
+    p1_ = [p1[0] , p1[1] - 0.35]
     msg.task = "goal"
     msg.objective = p1_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
+
 
     msg.task = "smash"
     msg.objective = p1
@@ -34,12 +35,27 @@ def main():
     rospy.sleep(DELAY)
 
     p2 = poi['Box1']
-    p2_ = [p2[0], p2[1] + 0.35]
+    p2_ = [p2[0] + 2., p2[1] + 0.4]
     msg.task = "goal"
     msg.objective = p2_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
+
+    # p2_ = [p2[0] + 1., p2[1] + 0.4]
+    # msg.task = "goal"
+    # msg.objective = p2_
+    # pub.publish(msg)
+    # rospy.loginfo(msg)
+    # rospy.sleep(DELAY)
+
+    # p2_ = [p2[0], p2[1] + 0.35]
+    # msg.task = "goal"
+    # msg.objective = p2_
+    # pub.publish(msg)
+    # rospy.loginfo(msg)
+    # rospy.sleep(DELAY)
+
 
     msg.task = "move"
     msg.objective = p2
@@ -63,34 +79,34 @@ def main():
     rospy.sleep(DELAY)
 
 
-    p4 = poi['Lego3']
-    p4_ = [p4[0] - 0.35, p4[1]]
-    msg.task = "goal"
-    msg.objective = p4_
-    pub.publish(msg)
-    rospy.loginfo(msg)
-    rospy.sleep(DELAY)
+    # p4 = poi['Lego3']
+    # p4_ = [p4[0] - 0.35, p4[1]]
+    # msg.task = "goal"
+    # msg.objective = p4_
+    # pub.publish(msg)
+    # rospy.loginfo(msg)
+    # rospy.sleep(DELAY)
 
-    msg.task = "pick"
-    msg.objective = p4
-    pub.publish(msg)
-    rospy.loginfo(msg)
-    rospy.sleep(DELAY)
+    # msg.task = "pick"
+    # msg.objective = p4
+    # pub.publish(msg)
+    # rospy.loginfo(msg)
+    # rospy.sleep(DELAY)
 
 
-    p5 = poi['Lego2']
-    p5_ = [p5[0], p5[1] - 0.35]
-    msg.task = "goal"
-    msg.objective = p5_
-    pub.publish(msg)
-    rospy.loginfo(msg)
-    rospy.sleep(DELAY)
+    # p5 = poi['Lego2']
+    # p5_ = [p5[0], p5[1] - 0.35]
+    # msg.task = "goal"
+    # msg.objective = p5_
+    # pub.publish(msg)
+    # rospy.loginfo(msg)
+    # rospy.sleep(DELAY)
 
-    msg.task = "pick"
-    msg.objective = p5
-    pub.publish(msg)
-    rospy.loginfo(msg)
-    rospy.sleep(DELAY)
+    # msg.task = "pick"
+    # msg.objective = p5
+    # pub.publish(msg)
+    # rospy.loginfo(msg)
+    # rospy.sleep(DELAY)
 
 
     p6 = poi['Origin']

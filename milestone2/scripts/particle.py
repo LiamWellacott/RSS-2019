@@ -16,8 +16,6 @@ import tf
 import sys
 import rospkg
 
-PUBLISH_RATE = 0.1
-
 ODOM_RATE = 30.
 
 SENSE_DIST = 0.06 # 6 cm offset between the wheel center and the sensor
@@ -114,12 +112,14 @@ class Particle(object):
                     # no intersection found indicating the robot is outside the arena
                     # probability is 0 for whole robot
                     #return 0
+                    #rospy.loginfo("invalid measurement")
                     prob = 0
             else:
                 # calculate probability of measurement
                 prob *= self._filterMeasurement(distances[0], m[i])
                 prob *= self._filterMeasurement(distances[1], m[i + int(self.nb_rays/2)])
                 #if prob == 0:
+                    #rospy.loginfo("0 likelihood")
                     #return 0
 
         return prob, d

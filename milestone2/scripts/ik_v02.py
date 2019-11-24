@@ -27,7 +27,7 @@ class Arm:
         self.l6=0.1265
 
         # Create rosnode for controller
-        # rospy.init_node("arm_control", anonymous=True)
+        #rospy.init_node("arm_control", anonymous=True)
 
         self.current_q = [0.,0.,0.,0., self.OPEN_GRIP] # need an inital until first val is sent to us
 
@@ -45,7 +45,7 @@ class Arm:
         self.next_q = np.array([0.,0.,0.,0., self.OPEN_GRIP])
 
     def push_button(self, x, y):
-    	return [np.array([x, y, 0.185, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+    	return [np.array([x, y, 0.205, self.OPEN_GRIP]), np.array([x, y, 0.155, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
 
 
     def move_obstacle(self, x, y):
@@ -235,6 +235,10 @@ class Arm:
 
         return self.stage == len(self.sequence)
 
+    def waitForRoutineFinish(self):
+        while not self._routineFinished():
+            rospy.sleep(1)
+     
     def _stepRoutine(self, start_routine=False):
         if start_routine:
             self.stage = 0
@@ -263,7 +267,7 @@ def main():
         #arm.step()
 
         if arm._routineFinished() and once:
-            arm.startSequence(arm.pickup(0.2 ,0.1))
+            arm.startSequence(arm.push_button(0.28 ,0.))
             once = False
 
 if __name__ == "__main__":

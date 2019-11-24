@@ -22,10 +22,10 @@ from utile import Map
 
 from Queue import PriorityQueue
 
-RADIUS_OBSTACLE = 0.32
+RADIUS_OBSTACLE = 0.2
 RADIUS_TARGET = .08
 PLOT_RADIUS = .05
-RRT_EXTEND_DIST = .32 # 20 CM between two points at most
+RRT_EXTEND_DIST = .2 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
@@ -233,6 +233,9 @@ class RRT(object):
         -------
             None
         """
+        if self.map.intersectCircle(goal, RADIUS_OBSTACLE):
+            print("FUCK YOU!!!!!")
+
         is_reached = False
         i = 0
         while not is_reached:
