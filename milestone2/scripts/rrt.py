@@ -22,7 +22,7 @@ from utile import Map
 
 from Queue import PriorityQueue
 
-RADIUS_OBSTACLE = 0.22
+RADIUS_OBSTACLE = 0.32
 RADIUS_TARGET = .08
 PLOT_RADIUS = .05
 RRT_EXTEND_DIST = .32 # 20 CM between two points at most
@@ -153,7 +153,7 @@ class RRT(object):
         output:
             boolean: True if collision is detected, False otherwise
         """
-        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE) or self.map.intersectCircle(p, RADIUS_OBSTACLE)
+        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE) #or self.map.intersectCircle(p, RADIUS_OBSTACLE)
 
     def samplePoint(self):
         """Samples a point inside the obstacle this is a guarentie

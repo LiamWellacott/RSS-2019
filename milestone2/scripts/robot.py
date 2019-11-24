@@ -21,7 +21,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-#from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
@@ -62,7 +62,7 @@ POSE_CUTOFF = 1.
 FILT_SAMPLES = 5
 
 NOISE_MOVE_X = 0.1
-NOISE_MOVE_Y = 0.1
+NOISE_MOVE_Y = 0.05
 NOISE_TURN = np.deg2rad(10.)
 NOISE_SENSE = 0.05
 
@@ -96,7 +96,7 @@ class Robot(object):
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
-        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         self.objectives = Queue()
@@ -115,8 +115,8 @@ class Robot(object):
         self.vel_msg = Twist()
         self.vel_msg.linear.x = 0
         self.vel_msg.angular.z = 0
-        #self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
-        #rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubVel)
+        self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
+        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubVel)
 
         # set initial position
         self.x = x
@@ -128,7 +128,7 @@ class Robot(object):
         self.collision_avoidance = Avoid()
 
         # Initialise arm
-        #self.arm = Arm()
+        self.arm = Arm()
 
         # Logging info
 
@@ -136,7 +136,7 @@ class Robot(object):
         self.log_dict = {}
         self.o = 0
         self.odom_log = {}
-        self.MAX_LOG = 100
+        self.MAX_LOG = 1000
         self.x_true = 0
         self.y_true = 0
         self.yaw_true = 0
@@ -396,9 +396,9 @@ class Robot(object):
         return
 
     def pubVel(self, event):
-        #if not self.collision_avoidance.isOK():
-        #    self.vel_msg.linear.x = 0
-        #    self.vel_msg.angular.z = self.collision_avoidance.turn()
+        if not self.collision_avoidance.isOK():
+            self.vel_msg.linear.x = 0
+            self.vel_msg.angular.z = self.collision_avoidance.turn()
         self.vel_pub.publish(self.vel_msg)
         return
 
