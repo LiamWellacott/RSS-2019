@@ -27,7 +27,7 @@ class Arm:
         self.l6=0.1265
 
         # Create rosnode for controller
-        rospy.init_node("arm_control", anonymous=True)
+        #rospy.init_node("arm_control", anonymous=True)
 
         self.current_q = [0.,0.,0.,0., self.OPEN_GRIP] # need an inital until first val is sent to us
 

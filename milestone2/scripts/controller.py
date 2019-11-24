@@ -105,7 +105,7 @@ class Controller(object):
         teta = math.atan2(dy, dx)
         a = (teta - yaw)
         a = ((a + np.pi) % (2*np.pi)) - np.pi
-        if np.abs(a) < np.abs(np.deg2rad(5)):
+        if np.abs(a) < np.abs(np.deg2rad(2)):
             return True
         return False
 

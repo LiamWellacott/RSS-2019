@@ -44,7 +44,7 @@ PATH = [
         [[3.80, 1.5], [3.85, 1.7], [3.90, 1.9], [3.95, 2.1], [4.0, 2.70]], 
         [[3.9-0.1, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]], 
         [[0.5, 2.], [0.5, 1.5], [0.5, 1.], [0.5, 0.80]],
-        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [3.90, 1.5]]
+        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [4.0, 1.5]]
         ]
 
 # relative path from package directory
@@ -247,6 +247,7 @@ class Robot(object):
             sample = objective.objective
             self.turn(sample)
             rospy.sleep(1)
+            rospy.loginfo("Pick object at ({};{}) from position ({}; {})...".format(sample[0], sample[1], self.x, self.y))
             samplerobot = self._worldToRobotFrame(sample)
             self.pickUp(samplerobot)
             rospy.loginfo("Sample collected")
@@ -264,6 +265,7 @@ class Robot(object):
             rospy.loginfo("move obstacle...")
             obstacle = objective.objective
             self.turn(obstacle)
+            rospy.loginfo("Move obstacle at ({};{}) from position ({}; {})...".format(obstacle[0], obstacle[1], self.x, self.y))
             rospy.sleep(1)
             obstaclerobot = self._worldToRobotFrame(obstacle)
             self.moveObst(obstaclerobot)
