@@ -30,6 +30,7 @@ SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
 MAP_FILE = "/maps/rss_offset_box1.json"
+#MAP_FILE = "/maps/rss_offset_box2.json"
 
 # fixed for repeatability
 np.random.seed(1)

@@ -7,6 +7,9 @@ from milestone2.msg import Task
 
 POI_FILE = "/config/poi.json"
 DELAY = 3
+MAP_FILE = "/maps/rss_offset_box1.json"
+#MAP_FILE = "/maps/rss_offset_box2.json"
+
 
 def main():
     rospack = rospkg.RosPack()
@@ -34,7 +37,11 @@ def main():
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
-    p2 = poi['Box1']
+    if MAP_FILE == "/maps/rss_offset_box1.json":
+        p2 = poi['Box1']
+    elif MAP_FILE = "/maps/rss_offset_box2.json"":
+        p2 = poi['Box2']
+
     p2_ = [p2[0] + 2., p2[1] + 0.4]
     msg.task = "goal"
     msg.objective = p2_

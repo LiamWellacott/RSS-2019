@@ -49,6 +49,7 @@ INITIAL_YAW = np.pi#/2.
 
 # relative path from package directory
 MAP_FILE = "/maps/rss_offset_box1.json"
+#MAP_FILE = "/maps/rss_offset_box2.json"
 
 NUM_RAYS = 8
 NUM_PARTICLES = 12
