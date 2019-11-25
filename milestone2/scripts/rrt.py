@@ -23,7 +23,7 @@ from utile import Map
 from Queue import PriorityQueue
 
 RADIUS_OBSTACLE = 0.2
-RADIUS_TARGET = .08
+RADIUS_TARGET = .07
 PLOT_RADIUS = .05
 RRT_EXTEND_DIST = .2 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200

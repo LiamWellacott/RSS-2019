@@ -51,12 +51,12 @@ class Arm:
     def move_obstacle(self, x, y):
     	#Push objects to the right if objects are already to weedle's right and vice versa
     	if y>=0.0:
-    		return [np.array([x, y-0.15, 0.2, self.OPEN_GRIP]), np.array([x, y+0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+    		return [np.array([0.1, y-0.25, 0.35, self.OPEN_GRIP]), np.array([x, y-0.25, 0.2, self.OPEN_GRIP]), np.array([x, y+0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
     	else:
-    		return [np.array([x, y+0.15, 0.2, self.OPEN_GRIP]), np.array([x, y-0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+    		return [np.array([0.1, y+0.25, 0.35, self.OPEN_GRIP]), np.array([x, y+0.25, 0.2, self.OPEN_GRIP]), np.array([x, y-0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
 
     def pickup(self, x ,y):
-    	return [np.array([0.3, 0.0, 0.3, self.OPEN_GRIP]), np.array([x-(0.02*np.cos(np.arctan(y/x))), y-(0.02*np.sin(np.arctan(y/x))), 0.05, self.OPEN_GRIP]), np.array([x, y, 0.05, 0.335]), np.array([x, y, 0.25, 0.335]), self.IDLE_SEQUENCE[0]]
+    	return [np.array([0.3, 0.0, 0.3, self.OPEN_GRIP]), np.array([x-(0.03*np.cos(np.arctan(y/x))), y-(0.03*np.sin(np.arctan(y/x))), 0.05, self.OPEN_GRIP]), np.array([x, y, 0.05, 0.335]), np.array([x, y, 0.25, 0.335]), self.IDLE_SEQUENCE[0]]
 
 
     def jointCallback(self, data):
@@ -171,12 +171,21 @@ class Arm:
         # Convert to XYZ
         self.current_xyzg = np.hstack((jEE,self.current_q[4]))
         diff_xyz_ = (self.target_xyzg[0:3] - self.current_xyzg[0:3])
-        diff_xyz=diff_xyz_ /(0.0001+np.linalg.norm(diff_xyz_)*25)
+        # diff_xyz=[]
+        diff_xyz = diff_xyz_ /(0.0001+np.linalg.norm(diff_xyz_)*23)
+        # for j in diff_xyz_:
+        #     if np.absolute(j)>self.THRESHOLD:
+        #         diff_xyz.append(np.sign(j) * 0.02)
+        #     else:
+        #         diff_xyz.append(0)
+        # diff_xyz=np.array(diff_xyz)
+
+        #rospy.loginfo(("diff_xyz_ : ", diff_xyz_, "diff_xyz :", diff_xyz, "targe xyzyg :", self.target_xyzg))
 
         J=self.geomJac(j1,j2,j3,jEE)
         invJ = np.linalg.pinv(J)
         radTheta=np.dot(invJ,diff_xyz)
-        directions = np.sign(radTheta)
+        #directions = np.sign(radTheta)
 
         grip_diff = (self.target_xyzg[3]-self.current_q[4])/1.2
 
@@ -210,7 +219,7 @@ class Arm:
     def _outOfRange(self):
         current_R=np.sqrt(self.current_xyzg[0]**2 + self.current_xyzg[1]**2 + (0.249-self.current_xyzg[2])**2)
         target_R=np.sqrt(self.target_xyzg[0]**2 + self.target_xyzg[1]**2 + (0.249-self.target_xyzg[2])**2)
-        return target_R + current_R > 0.66
+        return target_R + current_R > 0.64
 
     def _atTarget(self):
         '''
@@ -267,7 +276,7 @@ def main():
         #arm.step()
 
         if arm._routineFinished() and once:
-            arm.startSequence(arm.move_obstacle(0.28 ,0.))
+            arm.startSequence(arm.pickup(0.2 ,0.))
             once = False
 
 if __name__ == "__main__":

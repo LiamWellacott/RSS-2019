@@ -40,12 +40,12 @@ import json
 INITIAL_X = 3.80
 INITIAL_Y = 1.50
 INITIAL_YAW = np.pi
-PATH = [
-        [[3.80, 1.5], [3.85, 1.7], [3.90, 1.9], [3.95, 2.1], [4.0, 2.70]], 
-        [[3.9-0.1, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]], 
-        [[0.5, 2.], [0.5, 1.5], [0.5, 1.], [0.5, 0.80]],
-        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [4.0, 1.5]]
-        ]
+#PATH = [
+#        [[3.80, 1.5], [3.85, 1.7], [3.90, 1.9], [3.95, 2.1], [4.0, 2.70]], 
+#        [[3.9-0.1, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]], 
+#        [[0.5, 2.], [0.5, 1.5], [0.5, 1.], [0.5, 0.80]],
+#        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [4.0, 1.5]]
+#        ]
 
 # relative path from package directory
 MAP_FILE = "/maps/rss_offset_box1.json"
@@ -175,9 +175,9 @@ class Robot(object):
         rospy.loginfo("Waiting for rrt service...")
         rospy.wait_for_service('rrt')
         try:
-            #rrt = rospy.ServiceProxy('rrt', RRTsrv)
-            #resp = rrt([self.x, self.y], goal)
-            path = np.array(PATH[self.some_var]).reshape((-1,2))
+            rrt = rospy.ServiceProxy('rrt', RRTsrv)
+            resp = rrt([self.x, self.y], goal)
+            path = np.array(resp.path).reshape((-1,2))
             self.some_var += 1
             rospy.loginfo("Following new path...")
             #path = np.array(PATH)
@@ -234,6 +234,15 @@ class Robot(object):
         yrobot = ydiff*np.cos(self.yaw) - xdiff*np.sin(self.yaw)
         return [xrobot, yrobot]
 
+    def intermediateGoal(self, distance, sample):
+        d = np.sqrt((self.x - sample[0])**2 + (self.y - sample[1])**2 )
+        d_left = d - distance
+        rospy.loginfo("Adjusting Distance")
+        if d_left > 0:
+            rospy.loginfo("Distance Adjusted")
+            return [[self.x+d_left*np.cos(self.yaw), self.y+d_left*np.sin(self.yaw)]]
+        return [[self.x, self.y]]
+
     def objectiveHandler(self, objective):
         task = objective.task
         if task == "goal":
@@ -246,6 +255,9 @@ class Robot(object):
             rospy.loginfo("Pick up sample...")
             sample = objective.objective
             self.turn(sample)
+            goal = self.intermediateGoal(.2, sample)
+            self.controller.setPath(goal)
+            self.followPath()
             rospy.sleep(1)
             rospy.loginfo("Pick object at ({};{}) from position ({}; {})...".format(sample[0], sample[1], self.x, self.y))
             samplerobot = self._worldToRobotFrame(sample)
@@ -255,6 +267,9 @@ class Robot(object):
         elif task == "smash":
             button = objective.objective
             self.turn(button)
+            goal = self.intermediateGoal(.2, button)
+            self.controller.setPath(goal)
+            self.followPath()
             rospy.sleep(1)
             rospy.loginfo("Smash button at ({};{}) from position ({}; {})...".format(button[0], button[1], self.x, self.y))
             buttonrobot = self._worldToRobotFrame(button)
@@ -265,9 +280,13 @@ class Robot(object):
             rospy.loginfo("move obstacle...")
             obstacle = objective.objective
             self.turn(obstacle)
+            goal = self.intermediateGoal(.2, obstacle)
+            self.controller.setPath(goal)
+            self.followPath()
             rospy.loginfo("Move obstacle at ({};{}) from position ({}; {})...".format(obstacle[0], obstacle[1], self.x, self.y))
             rospy.sleep(1)
-            obstaclerobot = self._worldToRobotFrame(obstacle)
+            # For box 1  (for box 2 this should be negative)
+            obstaclerobot = self._worldToRobotFrame([obstacle[0]+0.1, obstacle[1]])
             self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
             return
@@ -436,7 +455,7 @@ class Robot(object):
         self.y = state_a[1]
         self.yaw = state_a[2]
 
-        self.logInfo(measurements, ray)
+        #self.logInfo(measurements, ray)
         # Resample particles
         self.particle_filter.particleUpdate()
 
