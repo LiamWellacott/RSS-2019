@@ -23,7 +23,7 @@ from utile import Map
 from Queue import PriorityQueue
 
 RADIUS_OBSTACLE = 0.2
-RADIUS_TARGET = .07
+RADIUS_TARGET = .08
 PLOT_RADIUS = .05
 RRT_EXTEND_DIST = .2 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
@@ -31,7 +31,7 @@ SMOOTHING_STEP = 0.1
 
 MAP_FILE = "/maps/rss_offset_box1.json"
 #MAP_FILE = "/maps/rss_offset_box2.json"
-
+#np.random.seed(3)
 # fixed for repeatability
 np.random.seed(1)
 

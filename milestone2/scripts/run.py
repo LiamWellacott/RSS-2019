@@ -39,7 +39,7 @@ def main():
 
     if MAP_FILE == "/maps/rss_offset_box1.json":
         p2 = poi['Box1']
-    elif MAP_FILE = "/maps/rss_offset_box2.json"":
+    elif MAP_FILE == "/maps/rss_offset_box2.json":
         p2 = poi['Box2']
 
     p2_ = [p2[0] + 2., p2[1] + 0.4]
@@ -84,7 +84,6 @@ def main():
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
-
 
     p4 = poi['Lego3']
     p4_ = [p4[0] - 0.35, p4[1]]

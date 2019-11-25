@@ -24,7 +24,7 @@ class Arm:
         self.l6=0.1265
 
         # Create rosnode for controller
-        rospy.init_node("arm_control", anonymous=True)
+        #rospy.init_node("arm_control", anonymous=True)
 
         self.current_q = [0.,0.,0.,0., self.OPEN_GRIP] # need an inital until first val is sent to us
 
@@ -267,7 +267,7 @@ def main():
         #arm.step()
 
         if arm._routineFinished() and once:
-            arm.startSequence(arm.pickup(0.2 ,0.1))
+            arm.startSequence(arm.push_button(0.2 ,0.15))
 
             once = False
 
