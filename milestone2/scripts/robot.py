@@ -39,10 +39,10 @@ import json
 # initial position in the map as per the brief
 INITIAL_X = 3.80
 INITIAL_Y = 1.50
-INITIAL_YAW = np.pi
+INITIAL_YAW = np.pi#/2.
 #PATH = [
-#        [[3.80, 1.5], [3.85, 1.7], [3.90, 1.9], [3.95, 2.1], [4.0, 2.70]], 
-#        [[3.9-0.1, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]], 
+#        [[3.80, 1.5], [3.85, 1.7], [3.90, 1.9], [3.95, 2.1], [4.0, 2.70]],
+#        [[3.9-0.1, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]],
 #        [[0.5, 2.], [0.5, 1.5], [0.5, 1.], [0.5, 0.80]],
 #        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [4.0, 1.5]]
 #        ]
@@ -101,7 +101,7 @@ class Robot(object):
         self.pose_len = 0
 
 
-        
+
         self.objectives = Queue()
         # Pose publisher, initialise message
         # TODO: UNCOMMENT THIS
@@ -109,13 +109,13 @@ class Robot(object):
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
-        
+
 
         # Publisher for cmd vel
         self.vel_msg = Twist()
         self.vel_msg.linear.x = 0
         self.vel_msg.angular.z = 0
-        
+
         # set initial position
         self.x = x
         self.y = y
@@ -138,7 +138,7 @@ class Robot(object):
         self.y_true = 0
         self.yaw_true = 0
 
-        self.some_var = 0
+        self.start = [x, y]
 
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
@@ -152,7 +152,7 @@ class Robot(object):
         rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
 
         self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
-        
+
         # Update position loop
         rospy.Timer(rospy.Duration(POSE_UPDATE_RATE), self.updatePoseEstimate)
         self.measure = None
@@ -170,15 +170,14 @@ class Robot(object):
         rospy.loginfo("received new task {}".format(msg.task))
         self.objectives.put(msg)
 
-    def goTo(self, goal):
+    def goTo(self, start, goal):
         rospy.loginfo("received new goal {}".format(goal))
         rospy.loginfo("Waiting for rrt service...")
         rospy.wait_for_service('rrt')
         try:
             rrt = rospy.ServiceProxy('rrt', RRTsrv)
-            resp = rrt([self.x, self.y], goal)
+            resp = rrt(start, goal)
             path = np.array(resp.path).reshape((-1,2))
-            self.some_var += 1
             rospy.loginfo("Following new path...")
             #path = np.array(PATH)
             self.controller.setPath(path)
@@ -248,8 +247,9 @@ class Robot(object):
         if task == "goal":
             goal = objective.objective
             rospy.loginfo("Moving to objective...")
-            self.goTo(goal)
+            self.goTo(self.start ,goal)
             rospy.loginfo("Reached objective")
+            self.start = goal
             return
         elif task == "pick":
             rospy.loginfo("Pick up sample...")
