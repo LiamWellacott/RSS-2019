@@ -286,7 +286,7 @@ class Robot(object):
             rospy.loginfo("Move obstacle at ({};{}) from position ({}; {})...".format(obstacle[0], obstacle[1], self.x, self.y))
             rospy.sleep(1)
             # For box 1  (for box 2 this should be negative)
-            obstaclerobot = self._worldToRobotFrame([obstacle[0]+0.1, obstacle[1]])
+            obstaclerobot = self._worldToRobotFrame([obstacle[0]+0.07, obstacle[1]])
             self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
             return

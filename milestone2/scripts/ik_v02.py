@@ -9,12 +9,9 @@ from sensor_msgs.msg import JointState
 class Arm:
 
     THRESHOLD = 0.02
-    SPEED = 0.005
-    OPEN_GRIP=1.2
+    OPEN_GRIP=1.3
 
     IDLE_SEQUENCE = [np.array([0.1, 0.0, 0.4, OPEN_GRIP])]
-    #PUSH_BUTTON_SEQUENCE = [np.array([0.2,0.0,0.25]), IDLE_SEQUENCE[0]]
-    #MOVE_OBSTACLE_SEQUENCE = [np.array([0.3, 0.0, 0.3]), np.array([0.25, 0.2, 0.2]), np.array([0.3, 0.0, 0.3]), np.array([0.25, -0.2, 0.2]), IDLE_SEQUENCE[0]]
 
     def __init__(self):
 
@@ -27,7 +24,7 @@ class Arm:
         self.l6=0.1265
 
         # Create rosnode for controller
-        #rospy.init_node("arm_control", anonymous=True)
+        rospy.init_node("arm_control", anonymous=True)
 
         self.current_q = [0.,0.,0.,0., self.OPEN_GRIP] # need an inital until first val is sent to us
 
@@ -40,6 +37,7 @@ class Arm:
         self.pub = rospy.Publisher('joint_trajectory_point',Float64MultiArray, queue_size =10)
         self.msg = Float64MultiArray()
 
+
         # initially the idle sequence is set so the arm is in a neutral position
         self.startSequence(self.IDLE_SEQUENCE)
         self.next_q = np.array([0.,0.,0.,0., self.OPEN_GRIP])
@@ -49,11 +47,17 @@ class Arm:
 
 
     def move_obstacle(self, x, y):
-    	#Push objects to the right if objects are already to weedle's right and vice versa
-    	if y>=0.0:
-    		return [np.array([0.1, y-0.25, 0.35, self.OPEN_GRIP]), np.array([x, y-0.25, 0.2, self.OPEN_GRIP]), np.array([x, y+0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
-    	else:
-    		return [np.array([0.1, y+0.25, 0.35, self.OPEN_GRIP]), np.array([x, y+0.25, 0.2, self.OPEN_GRIP]), np.array([x, y-0.15, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+        #Push objects to the right if objects are already to weedle's right and vice versa
+        if y>=0.0:
+            return [np.array([0.1, -0.25, 0.35, self.OPEN_GRIP]), np.array([0.25, -0.20, 0.2, self.OPEN_GRIP]), np.array([0.25+0.05, 0, 0.2, self.OPEN_GRIP]), np.array([0.25, +0.20, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+        else:
+            return [np.array([0.1, +0.25, 0.35, self.OPEN_GRIP]), np.array([0.25, +0.20, 0.2, self.OPEN_GRIP]), np.array([0.25+0.05, 0, 0.2, self.OPEN_GRIP]), np.array([0.25, -0.20, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+
+    	# #Push objects to the right if objects are already to weedle's right and vice versa
+    	# if y>=0.0:
+    	# 	return [np.array([0.1, y-0.25, 0.35, self.OPEN_GRIP]), np.array([x, y-0.20, 0.2, self.OPEN_GRIP]), np.array([x+0.05, y, 0.2, self.OPEN_GRIP]), np.array([x, y+0.20, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
+    	# else:
+    	# 	return [np.array([0.1, y+0.25, 0.35, self.OPEN_GRIP]), np.array([x, y+0.20, 0.2, self.OPEN_GRIP]), np.array([x+0.05, y, 0.2, self.OPEN_GRIP]), np.array([x, y-0.20, 0.2, self.OPEN_GRIP]), self.IDLE_SEQUENCE[0]]
 
     def pickup(self, x ,y):
     	return [np.array([0.3, 0.0, 0.3, self.OPEN_GRIP]), np.array([x-(0.03*np.cos(np.arctan(y/x))), y-(0.03*np.sin(np.arctan(y/x))), 0.05, self.OPEN_GRIP]), np.array([x, y, 0.05, 0.335]), np.array([x, y, 0.25, 0.335]), self.IDLE_SEQUENCE[0]]
@@ -171,36 +175,18 @@ class Arm:
         # Convert to XYZ
         self.current_xyzg = np.hstack((jEE,self.current_q[4]))
         diff_xyz_ = (self.target_xyzg[0:3] - self.current_xyzg[0:3])
-        # diff_xyz=[]
         diff_xyz = diff_xyz_ /(0.0001+np.linalg.norm(diff_xyz_)*23)
-        # for j in diff_xyz_:
-        #     if np.absolute(j)>self.THRESHOLD:
-        #         diff_xyz.append(np.sign(j) * 0.02)
-        #     else:
-        #         diff_xyz.append(0)
-        # diff_xyz=np.array(diff_xyz)
 
-        #rospy.loginfo(("diff_xyz_ : ", diff_xyz_, "diff_xyz :", diff_xyz, "targe xyzyg :", self.target_xyzg))
-
+        # update joint
         J=self.geomJac(j1,j2,j3,jEE)
         invJ = np.linalg.pinv(J)
         radTheta=np.dot(invJ,diff_xyz)
-        #directions = np.sign(radTheta)
-
-        grip_diff = (self.target_xyzg[3]-self.current_q[4])/1.2
-
-
-        # TODO use the sensor values
         for i in range(len(radTheta)):
             self.next_q[i] = self.current_q[i] + radTheta[i]
+
+        #update gripper
+        grip_diff = (self.target_xyzg[3]-self.current_q[4])/1.2
         self.next_q[4]= self.current_q[4] + grip_diff
-#        for i in range(len(radTheta)):
-#            self.next_q[i] = self.current_q[i] + (directions[i]*self.SPEED)
-#        self.next_q[4]= self.current_q[4] + np.sign(grip_diff)*self.SPEED
-
-        #rospy.loginfo(("Current xyzg: ", self.current_xyzg, "| Target: ", self.target_xyzg, "| Diff_xyz_ :",
-         #diff_xyz_,"| Diff_xyz: ", diff_xyz , "| RadTheta:", radTheta, "| Next q: ", self.next_q))
-
 
         # Send the new state to the arm.
         self._sendCommand()
@@ -212,14 +198,8 @@ class Arm:
         '''
         sets the passed sequence and sets the initial target position
         '''
-
         self.sequence = seq
         self._stepRoutine(start_routine=True)
-
-    def _outOfRange(self):
-        current_R=np.sqrt(self.current_xyzg[0]**2 + self.current_xyzg[1]**2 + (0.249-self.current_xyzg[2])**2)
-        target_R=np.sqrt(self.target_xyzg[0]**2 + self.target_xyzg[1]**2 + (0.249-self.target_xyzg[2])**2)
-        return target_R + current_R > 0.64
 
     def _atTarget(self):
         '''
@@ -240,8 +220,6 @@ class Arm:
         '''
         true if the current stage is the end of the sequence
         '''
-        #rospy.loginfo(("Routine is finished returns: ", self.stage == len(self.sequence)))
-
         return self.stage == len(self.sequence)
 
     def waitForRoutineFinish(self):
@@ -252,17 +230,30 @@ class Arm:
         if start_routine:
             self.stage = 0
             self.target_xyzg = self.sequence[self.stage]
+            self.j = 0
         else:
-            if self._atTarget() or self._outOfRange(): # if at next objective
+            
+            if self._atTarget(): # if at next objective
                 # move to the next stage
-                if self._outOfRange():
-                    rospy.loginfo("Out of Range")
                 self.stage += 1
+                self.j = 0
                 if not self._routineFinished(): 
                     self.target_xyzg = self.sequence[self.stage]
                     rospy.loginfo("Next Target")
                 else:
-                	rospy.loginfo("Target Achieved")
+                    rospy.loginfo("Target Achieved")
+
+            self.j += 1
+            if self.j>120:
+                self.stage+=1
+                self.j = 0
+                if not self._routineFinished(): 
+                    self.target_xyzg = self.sequence[self.stage]
+                    rospy.loginfo("Skipping Target")
+                else:
+                    self.next_q=[-0.00306796166114, 1.3713788986206055, -0.5706408619880676, -0.5092816352844238, self.OPEN_GRIP]
+                    self._sendCommand()
+                    rospy.loginfo("Back to Idle")
 
 def main():
     arm=Arm()
@@ -276,7 +267,8 @@ def main():
         #arm.step()
 
         if arm._routineFinished() and once:
-            arm.startSequence(arm.pickup(0.2 ,0.))
+            arm.startSequence(arm.pickup(0.2 ,0.1))
+
             once = False
 
 if __name__ == "__main__":
