@@ -85,7 +85,6 @@ def main():
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
-
     p4 = poi['Lego3']
     p4_ = [p4[0] - 0.35, p4[1]]
     msg.task = "goal"

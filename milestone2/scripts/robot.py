@@ -52,7 +52,7 @@ MAP_FILE = "/maps/rss_offset.json"
 #MAP_FILE = "/maps/rss_offset_box2.json"
 
 NUM_RAYS = 8
-NUM_PARTICLES = 12
+NUM_PARTICLES = 17
 
 PUBLISH_RATE = 1./0.15
 POSE_UPDATE_RATE = 0.25
@@ -260,7 +260,7 @@ class Robot(object):
             rospy.loginfo("Pick up sample...")
             sample = objective.objective
             self.turn(sample)
-            goal = self.intermediateGoal(.2, sample)
+            goal = self.intermediateGoal(.15, sample)
             self.controller.setPath(goal)
             self.followPath()
             rospy.sleep(1)
@@ -272,7 +272,7 @@ class Robot(object):
         elif task == "smash":
             button = objective.objective
             self.turn(button)
-            goal = self.intermediateGoal(.2, button)
+            goal = self.intermediateGoal(.18, button)
             self.controller.setPath(goal)
             self.followPath()
             rospy.sleep(1)
@@ -391,7 +391,7 @@ class Robot(object):
 
     def updatePoseEstimate(self, event):
         if self.measure is not None:
-            start_time = rospy.get_time()
+            #start_time = rospy.get_time()
             self.poseEstimationUpdate(self.measure)
             #rospy.loginfo("Duration: %s" % (rospy.get_time()-start_time))
 
