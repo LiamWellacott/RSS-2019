@@ -7,6 +7,9 @@ from milestone2.msg import Task
 
 POI_FILE = "/config/poi.json"
 DELAY = 3
+MAP_FILE = "/maps/rss_offset_box1.json"
+#MAP_FILE = "/maps/rss_offset_box2.json"
+
 
 def main():
     rospack = rospkg.RosPack()
@@ -20,12 +23,13 @@ def main():
 
     # Go to the button
     p1 = poi['Button']
-    p1_ = [p1[0], p1[1] - 0.35]
+    p1_ = [p1[0] , p1[1] - 0.35]
     msg.task = "goal"
     msg.objective = p1_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
+
 
     msg.task = "smash"
     msg.objective = p1
@@ -33,13 +37,32 @@ def main():
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
 
-    p2 = poi['Box1']
+    if MAP_FILE == "/maps/rss_offset_box1.json":
+        p2 = poi['Box1']
+    elif MAP_FILE == "/maps/rss_offset_box2.json":
+        p2 = poi['Box2']
+
+    p2_ = [p2[0] + 2., p2[1] + 0.4]
+    msg.task = "goal"
+    msg.objective = p2_
+    pub.publish(msg)
+    rospy.loginfo(msg)
+    rospy.sleep(DELAY)
+
+    p2_ = [p2[0] + 1., p2[1] + 0.4]
+    msg.task = "goal"
+    msg.objective = p2_
+    pub.publish(msg)
+    rospy.loginfo(msg)
+    rospy.sleep(DELAY)
+
     p2_ = [p2[0], p2[1] + 0.35]
     msg.task = "goal"
     msg.objective = p2_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
+
 
     msg.task = "move"
     msg.objective = p2
@@ -61,7 +84,6 @@ def main():
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)
-
 
     p4 = poi['Lego3']
     p4_ = [p4[0] - 0.35, p4[1]]
@@ -94,9 +116,9 @@ def main():
 
 
     p6 = poi['Origin']
-    p6_ = [p6[0], p6[1]]
+    p6_ = [p6[0] + 0.3, p6[1]]
     msg.task = "goal"
-    msg.objective = p6
+    msg.objective = p6_
     pub.publish(msg)
     rospy.loginfo(msg)
     rospy.sleep(DELAY)

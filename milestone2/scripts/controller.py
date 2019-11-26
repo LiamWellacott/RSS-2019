@@ -65,11 +65,11 @@ class Controller(object):
     def mv2pt(self, pt):
 
         kv = 1
-        kd = 0.1
+        kd = 0.5
         kh = 5
 
-        vm = 0.10
-        wm = 0.80
+        vm = 0.05
+        wm = 0.4
 
         dx = pt[0] - self.pose[0]
         dy = pt[1] - self.pose[1]
@@ -90,11 +90,36 @@ class Controller(object):
                 w = gamma
             else:
                 w = v/r
-
         w = min(w, wm)
+        #w = max(min(w, wm), -wm)
 
         if self.first and np.abs(a) > 5:
             v = 0
         elif self.first and np.abs(a) < 5:
             self.first = False
         return v, w
+
+    def isDoneAngle(self, pt_target, pose, yaw):
+        dx = pt_target[0] - pose[0]
+        dy = pt_target[1] - pose[1]
+        teta = math.atan2(dy, dx)
+        a = (teta - yaw)
+        a = ((a + np.pi) % (2*np.pi)) - np.pi
+        if np.abs(a) < np.abs(np.deg2rad(2)):
+            return True
+        return False
+
+    def align(self, pt_target, pose, yaw):
+        kh = 0.5
+        wm = 0.80
+
+        dx = pt_target[0] - pose[0]
+        dy = pt_target[1] - pose[1]
+        teta = math.atan2(dy, dx)
+        a = (teta - yaw)
+        a = ((a + np.pi) % (2*np.pi)) - np.pi
+        w = kh*a
+        w = min(w,wm)
+        #w = max(min(w, wm), -wm)
+
+        return w

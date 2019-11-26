@@ -287,17 +287,17 @@ class Map(object):
             c = np.dot(f, f) - radius*radius
 
             delta = b**2 - 4*a*c
+
             if delta < 0:
                 continue
             delta = np.sqrt(delta)
             t1 = (-b + delta)/(2*a)
             t2 = (-b - delta)/(2*a)
 
-            '''
-            if (t1 >= 0 and t1 <= 1) or (t2 >= 0 and t2 <= 1):
+            if (t1 >= 0 and t1 <= 1) or (t2 >= 0 and t2 <= 1) or (np.linalg.norm(point - wall.p1) < radius and np.linalg.norm(point - wall.p2) < radius):
                 p1 = wall.p1 + t1*wall.vec
                 p2 = wall.p1 + t2*wall.vec
-
+                '''
                 fig, ax = plt.subplots()
                 fig, ax = self.plotMap(fig, ax)
                 circle = plt.Circle((point[0], point[1]), radius, color='r', alpha=0.1)
@@ -314,6 +314,8 @@ class Map(object):
             if t1 >= 0 and t1 <= 1:
                 return True
             if t2 >= 0 and t2 <= 1:
+                return True
+            if np.linalg.norm(point - wall.p1) < radius and np.linalg.norm(point - wall.p2) < radius:
                 return True
 
         return False
@@ -356,9 +358,8 @@ def dot(v, w):
 
 def main():
     map = Map("maps/rss_offset_box1.json")
-    fig, ax = plt.subplots()
-    map.plotMap(fig, ax)
-    plt.show()
+    point = np.array([1., 2.5])
+    map.intersectCircle(point, 0.32)
 
 if __name__ == "__main__":
     main()

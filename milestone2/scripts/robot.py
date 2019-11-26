@@ -29,6 +29,8 @@ from milestone2.msg import Task
 
 import json
 
+#from time import time
+
 #import scipy.signal as sig
 #import matplotlib
 #matplotlib.use('Agg')
@@ -37,16 +39,23 @@ import json
 # initial position in the map as per the brief
 INITIAL_X = 3.80
 INITIAL_Y = 1.50
-INITIAL_YAW = np.pi
-#PATH = [[3.60, 1.5], [3.40, 1.5], [3.20, 1.5], [3.0, 1.5], [2.8, 1.5]]
+INITIAL_YAW = np.pi#/2.
+#PATH = [
+#        [[3.80, 1.5], [3.85, 1.7], [3.90, 1.9], [3.95, 2.1], [4.0, 2.70]],
+#        [[3.9-0.1, 2.7], [3.0, 2.75], [2.0, 2.75], [0.75, 2.70]],
+#        [[0.5, 2.], [0.5, 1.5], [0.5, 1.], [0.5, 0.80]],
+#        [[1. , 0.45], [2.45, 0.45], [2.45, 1.5], [4.0, 1.5]]
+#        ]
 
 # relative path from package directory
 MAP_FILE = "/maps/rss_offset_box1.json"
+#MAP_FILE = "/maps/rss_offset_box2.json"
 
 NUM_RAYS = 8
-NUM_PARTICLES = 20
+NUM_PARTICLES = 17
 
-PUBLISH_RATE = 0.1
+PUBLISH_RATE = 1./0.15
+POSE_UPDATE_RATE = 0.25
 
 MAX_VAL = 150
 
@@ -62,7 +71,7 @@ POSE_CUTOFF = 1.
 FILT_SAMPLES = 5
 
 NOISE_MOVE_X = 0.1
-NOISE_MOVE_Y = 0.1
+NOISE_MOVE_Y = 0.05
 NOISE_TURN = np.deg2rad(10.)
 NOISE_SENSE = 0.05
 
@@ -93,12 +102,7 @@ class Robot(object):
         self.pose_len = 0
 
 
-        # subscribe
-        rospy.Subscriber("scan", LaserScan, self.scanCallback)
-        rospy.Subscriber("odom", Odometry, self.odomCallback)
-        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
-        # Allows to set a goal
-        rospy.Subscriber("task", Task, self.setObjective)
+
         self.objectives = Queue()
         # Pose publisher, initialise message
         # TODO: UNCOMMENT THIS
@@ -106,17 +110,12 @@ class Robot(object):
         self.pose_msg.linear.x = x
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
-        # timer for pose publisher
-        # TODO: UNCOMMENT THIS
-        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
-        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
+
 
         # Publisher for cmd vel
         self.vel_msg = Twist()
         self.vel_msg.linear.x = 0
         self.vel_msg.angular.z = 0
-        #self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
-        #rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubVel)
 
         # set initial position
         self.x = x
@@ -128,17 +127,37 @@ class Robot(object):
         self.collision_avoidance = Avoid()
 
         # Initialise arm
-        #self.arm = Arm()
+        self.arm = Arm()
 
         # Logging info
         self.i = 0
         self.log_dict = {}
         self.o = 0
         self.odom_log = {}
-        self.MAX_LOG = 100
+        self.MAX_LOG = 500
         self.x_true = 0
         self.y_true = 0
         self.yaw_true = 0
+
+        self.start = [x, y]
+
+        # subscribe
+        rospy.Subscriber("scan", LaserScan, self.scanCallback)
+        rospy.Subscriber("odom", Odometry, self.odomCallback)
+        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        # Allows to set a goal
+        rospy.Subscriber("task", Task, self.setObjective)
+        # timer for pose publisher
+        # TODO: UNCOMMENT THIS
+        self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
+        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
+
+        self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
+
+        # Update position loop
+        rospy.Timer(rospy.Duration(POSE_UPDATE_RATE), self.updatePoseEstimate)
+        self.measure = None
+
 
         rospy.loginfo("Started robot node")
         while not rospy.is_shutdown():
@@ -152,13 +171,13 @@ class Robot(object):
         rospy.loginfo("received new task {}".format(msg.task))
         self.objectives.put(msg)
 
-    def goTo(self, goal):
+    def goTo(self, start, goal):
         rospy.loginfo("received new goal {}".format(goal))
         rospy.loginfo("Waiting for rrt service...")
         rospy.wait_for_service('rrt')
         try:
             rrt = rospy.ServiceProxy('rrt', RRTsrv)
-            resp = rrt([self.x, self.y], goal)
+            resp = rrt(start, goal)
             path = np.array(resp.path).reshape((-1,2))
             rospy.loginfo("Following new path...")
             #path = np.array(PATH)
@@ -175,19 +194,36 @@ class Robot(object):
             print("Service call failed: %s"%e)
             return
 
+    def turn(self, target):
+        r = rospy.Rate(PUBLISH_RATE)
+        while not self.controller.isDoneAngle(target, [self.x, self.y], self.yaw):
+            w = self.controller.align(target, [self.x, self.y], self.yaw)
+            self.vel_msg.linear.x = 0
+            self.vel_msg.angular.z = w
+            self.pubVel()
+            r.sleep()
+
+        # stop moving
+        self.vel_msg.linear.x = 0
+        self.vel_msg.angular.z = 0
+        self.pubVel()
+
     def pickUp(self, sample):
         # Sample[0] and sample[1] should be the target's coordinates in weedle's frame
         self.arm.startSequence(self.arm.pickup(sample[0] , sample[1]))
+        self.arm.waitForRoutineFinish()
         return
 
     def smashButton(self, button):
         # Button[0] and Button[1] should be the target's coordinates in weedle's frame
         self.arm.startSequence(self.arm.push_button(button[0] , button[1]))
+        self.arm.waitForRoutineFinish()
         return
 
     def moveObst(self, obstacle):
         # Objective[0] and Objective[1] should be the target's coordinates in weedle's frame
         self.arm.startSequence(self.arm.move_obstacle(obstacle[0] , obstacle[1]))
+        self.arm.waitForRoutineFinish()
         return
 
     def _worldToRobotFrame(self, coordinates):
@@ -198,24 +234,45 @@ class Robot(object):
         yrobot = ydiff*np.cos(self.yaw) - xdiff*np.sin(self.yaw)
         return [xrobot, yrobot]
 
+    def intermediateGoal(self, distance, sample):
+        d = np.sqrt((self.x - sample[0])**2 + (self.y - sample[1])**2 )
+        d_left = d - distance
+        rospy.loginfo("Adjusting Distance")
+        if d_left > 0:
+            rospy.loginfo("Distance Adjusted")
+            return [[self.x+d_left*np.cos(self.yaw), self.y+d_left*np.sin(self.yaw)]]
+        return [[self.x, self.y]]
+
     def objectiveHandler(self, objective):
         task = objective.task
         if task == "goal":
             goal = objective.objective
             rospy.loginfo("Moving to objective...")
-            self.goTo(goal)
+            self.goTo(self.start ,goal)
             rospy.loginfo("Reached objective")
+            self.start = goal
             return
         elif task == "pick":
             rospy.loginfo("Pick up sample...")
             sample = objective.objective
+            self.turn(sample)
+            goal = self.intermediateGoal(.15, sample)
+            self.controller.setPath(goal)
+            self.followPath()
+            rospy.sleep(1)
+            rospy.loginfo("Pick object at ({};{}) from position ({}; {})...".format(sample[0], sample[1], self.x, self.y))
             samplerobot = self._worldToRobotFrame(sample)
             self.pickUp(samplerobot)
             rospy.loginfo("Sample collected")
             return
         elif task == "smash":
-            rospy.loginfo("Smash button...")
             button = objective.objective
+            self.turn(button)
+            goal = self.intermediateGoal(.18, button)
+            self.controller.setPath(goal)
+            self.followPath()
+            rospy.sleep(1)
+            rospy.loginfo("Smash button at ({};{}) from position ({}; {})...".format(button[0], button[1], self.x, self.y))
             buttonrobot = self._worldToRobotFrame(button)
             self.smashButton(buttonrobot)
             rospy.loginfo("Button smashed")
@@ -223,7 +280,14 @@ class Robot(object):
         elif task == "move":
             rospy.loginfo("move obstacle...")
             obstacle = objective.objective
-            obstaclerobot = self._worldToRobotFrame(obstacle)
+            self.turn(obstacle)
+            goal = self.intermediateGoal(.2, obstacle)
+            self.controller.setPath(goal)
+            self.followPath()
+            rospy.loginfo("Move obstacle at ({};{}) from position ({}; {})...".format(obstacle[0], obstacle[1], self.x, self.y))
+            rospy.sleep(1)
+            # For box 1  (for box 2 this should be negative)
+            obstaclerobot = self._worldToRobotFrame([obstacle[0]+0.07, obstacle[1]])
             self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
             return
@@ -231,12 +295,21 @@ class Robot(object):
             rospy.logwarning("Couldn't indentify objective {}".format(task))
 
     def followPath(self):
+        r = rospy.Rate(PUBLISH_RATE)
         while not self.controller.isDone(self.x, self.y):
             v, w = self.controller.getSpeed(self.x, self.y, self.yaw)
             self.vel_msg.linear.x = v
             self.vel_msg.angular.z = w
+            self.pubVel()
+            #if not self.collision_avoidance.isOK():
+            #    self.vel_msg.linear.x = 0
+            #    self.vel_msg.angular.z = self.collision_avoidance.turn()
+            r.sleep()
+
+        # stop moving
         self.vel_msg.linear.x = 0
         self.vel_msg.angular.z = 0
+        self.pubVel()
 
     def gazeboCallback(self, msg):
         j = 0
@@ -265,7 +338,7 @@ class Robot(object):
         # get the measurements for the specified number of points out of the scan information
         indexes = np.rint(np.linspace(0, 360 - 360/self.nb_rays, self.nb_rays)).astype(int)
         m = np.array(msg.ranges)
-        measure = m[indexes]
+        self.measure = m[indexes]
 
         #self.poseEstimationUpdate(measure)
 
@@ -312,9 +385,13 @@ class Robot(object):
                 measure[i] = self.lpf(ray, CUTOFF, SCAN_HZ)[-1]
             # update position estimation
             '''
-        self.poseEstimationUpdate(measure)
-
         return
+
+    def updatePoseEstimate(self, event):
+        if self.measure is not None:
+            #start_time = rospy.get_time()
+            self.poseEstimationUpdate(self.measure)
+            #rospy.loginfo("Duration: %s" % (rospy.get_time()-start_time))
 
     def odomCallback(self, msg):
 
@@ -348,6 +425,7 @@ class Robot(object):
 
     def poseEstimationUpdate(self, measurements):
         # Update current weights
+        #start = rospy.get_time()
         rays, w = self.particle_filter.measurementUpdate(measurements)
         i = np.argmax(w)
         ray = rays[i]
@@ -378,7 +456,7 @@ class Robot(object):
         self.y = state_a[1]
         self.yaw = state_a[2]
 
-        self.logInfo(measurements, ray)
+        #self.logInfo(measurements, ray)
         # Resample particles
         self.particle_filter.particleUpdate()
 
@@ -387,6 +465,8 @@ class Robot(object):
         self.pose_msg.linear.y = y
         self.pose_msg.angular.z = yaw
 
+        #end = rospy.get_time()
+        #rospy.loginfo(end - start)
 
         return
 
@@ -394,10 +474,7 @@ class Robot(object):
         self.pose_pub.publish(self.pose_msg)
         return
 
-    def pubVel(self, event):
-        #if not self.collision_avoidance.isOK():
-        #    self.vel_msg.linear.x = 0
-        #    self.vel_msg.angular.z = self.collision_avoidance.turn()
+    def pubVel(self): #, event):
         self.vel_pub.publish(self.vel_msg)
         return
 
@@ -457,24 +534,27 @@ class Robot(object):
         return filtered
 
     def logInfo(self, m, rays):
-        p = self.particle_filter.getPositions()
-        dict = {"{}rPose".format(self.i): [self.x, self.y, self.yaw],
-                "{}tPose".format(self.i): [self.x_true, self.y_true, self.yaw_true],
-                "{}pPose".format(self.i): p,
-                "{}rRay".format(self.i): rays,
-                "{}tScan".format(self.i): m.tolist()}
 
-        self.log_dict.update(dict)
-        if self.i < self.MAX_LOG:
-            rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
-        if self.i == self.MAX_LOG:
-            rospack = rospkg.RosPack()
-            path = rospack.get_path('milestone2')
-            file = path + "/loginfo/log_{}_{}_{}_{}.json".format(NOISE_MOVE_X, NOISE_MOVE_Y, np.rad2deg(NOISE_TURN), NOISE_SENSE)
-            with open(file, "w") as out_file:
-                json.dump(self.log_dict, out_file, indent=4)
+        offset = 500
+        if self.i > offset:
+            p = self.particle_filter.getPositions()
+            dict = {"{}rPose".format(self.i): [self.x, self.y, self.yaw],
+                    "{}tPose".format(self.i): [self.x_true, self.y_true, self.yaw_true],
+                    "{}pPose".format(self.i): p,
+                    "{}rRay".format(self.i): rays,
+                    "{}tScan".format(self.i): m.tolist()}
 
-            rospy.loginfo("Data dumped")
+            self.log_dict.update(dict)
+            #if self.i < self.MAX_LOG:
+                #rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
+            if self.i == self.MAX_LOG + offset:
+                rospack = rospkg.RosPack()
+                path = rospack.get_path('milestone2')
+                file = path + "/loginfo/log_{}_{}_{}_{}.json".format(NOISE_MOVE_X, NOISE_MOVE_Y, np.rad2deg(NOISE_TURN), NOISE_SENSE)
+                with open(file, "w") as out_file:
+                    json.dump(self.log_dict, out_file, indent=4)
+
+                rospy.loginfo("Data dumped")
         self.i += 1
 
     def logInfoOdom(self, vel1, vel2):

@@ -22,17 +22,18 @@ from utile import Map
 
 from Queue import PriorityQueue
 
-RADIUS_OBSTACLE = 0.22
+RADIUS_OBSTACLE = 0.2
 RADIUS_TARGET = .08
 PLOT_RADIUS = .05
-RRT_EXTEND_DIST = .32 # 20 CM between two points at most
+RRT_EXTEND_DIST = .2 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
 MAP_FILE = "/maps/rss_offset_box1.json"
-
+#MAP_FILE = "/maps/rss_offset_box2.json"
+#np.random.seed(3)
 # fixed for repeatability
-np.random.seed(0)
+np.random.seed(1)
 
 class Node(object):
     def __init__(self, parent, position, id):
@@ -153,7 +154,7 @@ class RRT(object):
         output:
             boolean: True if collision is detected, False otherwise
         """
-        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE) or self.map.intersectCircle(p, RADIUS_OBSTACLE)
+        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE) #or self.map.intersectCircle(p, RADIUS_OBSTACLE)
 
     def samplePoint(self):
         """Samples a point inside the obstacle this is a guarentie
@@ -233,6 +234,9 @@ class RRT(object):
         -------
             None
         """
+        if self.map.intersectCircle(goal, RADIUS_OBSTACLE):
+            print("FUCK YOU!!!!!")
+
         is_reached = False
         i = 0
         while not is_reached:
