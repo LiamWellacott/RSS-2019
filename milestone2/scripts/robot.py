@@ -21,7 +21,7 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 # Gazebo messages
-#from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.msg import ModelStates
 # RRT path planing service messages
 from milestone2.srv import RRTsrv, RRTsrvResponse
 # Set goal for the robot
@@ -48,7 +48,7 @@ INITIAL_YAW = np.pi#/2.
 #        ]
 
 # relative path from package directory
-MAP_FILE = "/maps/rss_offset_box1.json"
+MAP_FILE = "/maps/rss_offset.json"
 #MAP_FILE = "/maps/rss_offset_box2.json"
 
 NUM_RAYS = 8
@@ -127,14 +127,15 @@ class Robot(object):
         self.collision_avoidance = Avoid()
 
         # Initialise arm
-        self.arm = Arm()
+        #self.arm = Arm()
 
         # Logging info
         self.i = 0
+        self.path_i = 0
         self.log_dict = {}
         self.o = 0
         self.odom_log = {}
-        self.MAX_LOG = 500
+        self.MAX_LOG = 1500
         self.x_true = 0
         self.y_true = 0
         self.yaw_true = 0
@@ -144,13 +145,13 @@ class Robot(object):
         # subscribe
         rospy.Subscriber("scan", LaserScan, self.scanCallback)
         rospy.Subscriber("odom", Odometry, self.odomCallback)
-        #rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
+        rospy.Subscriber("gazebo/model_states", ModelStates, self.gazeboCallback)
         # Allows to set a goal
         rospy.Subscriber("task", Task, self.setObjective)
         # timer for pose publisher
         # TODO: UNCOMMENT THIS
         self.pose_pub = rospy.Publisher('pf_pose', Twist, queue_size = 10)
-        rospy.Timer(rospy.Duration(PUBLISH_RATE), self.pubPose)
+        rospy.Timer(rospy.Duration(1./PUBLISH_RATE), self.pubPose)
 
         self.vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 10)
 
@@ -187,6 +188,9 @@ class Robot(object):
             #fig, ax = self.map.plotMap(fig, ax)
             #ax.plot(path[:, 0], path[:, 1], 'r')
             #plt.show()
+            dict = {"{}path".format(self.path_i): path.tolist()}
+            self.log_dict.update(dict)
+            self.path_i += 1
 
             self.followPath()
             rospy.loginfo("Reached goal.")
@@ -261,8 +265,8 @@ class Robot(object):
             self.followPath()
             rospy.sleep(1)
             rospy.loginfo("Pick object at ({};{}) from position ({}; {})...".format(sample[0], sample[1], self.x, self.y))
-            samplerobot = self._worldToRobotFrame(sample)
-            self.pickUp(samplerobot)
+            #samplerobot = self._worldToRobotFrame(sample)
+            #self.pickUp(samplerobot)
             rospy.loginfo("Sample collected")
             return
         elif task == "smash":
@@ -273,8 +277,8 @@ class Robot(object):
             self.followPath()
             rospy.sleep(1)
             rospy.loginfo("Smash button at ({};{}) from position ({}; {})...".format(button[0], button[1], self.x, self.y))
-            buttonrobot = self._worldToRobotFrame(button)
-            self.smashButton(buttonrobot)
+            #buttonrobot = self._worldToRobotFrame(button)
+            #self.smashButton(buttonrobot)
             rospy.loginfo("Button smashed")
             return
         elif task == "move":
@@ -287,8 +291,8 @@ class Robot(object):
             rospy.loginfo("Move obstacle at ({};{}) from position ({}; {})...".format(obstacle[0], obstacle[1], self.x, self.y))
             rospy.sleep(1)
             # For box 1  (for box 2 this should be negative)
-            obstaclerobot = self._worldToRobotFrame([obstacle[0]+0.1, obstacle[1]])
-            self.moveObst(obstaclerobot)
+            #obstaclerobot = self._worldToRobotFrame([obstacle[0]+0.1, obstacle[1]])
+            #self.moveObst(obstaclerobot)
             rospy.loginfo("Obstacle moved")
             return
         else:
@@ -327,11 +331,9 @@ class Robot(object):
         )
         self.yaw_true = tf.transformations.euler_from_quaternion(orientation)[2]
 
-        vel = msg.twist[j]
-
-        self.true_x_vel = vel.linear.x
-        self.true_y_vel = vel.linear.y
-        self.true_yaw_vel = vel.angular.z
+        self.x = self.x_true
+        self.y = self.y_true
+        self.yaw = self.yaw_true
 
     def scanCallback(self, msg):
         self.collision_avoidance.scanCallback(msg)
@@ -452,11 +454,11 @@ class Robot(object):
             for i, s in enumerate(self.pose_buff):
                 state_a[i] = self.lpf(s, POSE_CUTOFF, POSE_HZ)[-1]
         '''
-        self.x = state_a[0]
-        self.y = state_a[1]
-        self.yaw = state_a[2]
+        #self.x = state_a[0]
+        #self.y = state_a[1]
+        #self.yaw = state_a[2]
 
-        #self.logInfo(measurements, ray)
+        self.logInfo(measurements, ray)
         # Resample particles
         self.particle_filter.particleUpdate()
 
@@ -535,7 +537,7 @@ class Robot(object):
 
     def logInfo(self, m, rays):
 
-        offset = 500
+        offset = 0
         if self.i > offset:
             p = self.particle_filter.getPositions()
             dict = {"{}rPose".format(self.i): [self.x, self.y, self.yaw],
@@ -545,12 +547,12 @@ class Robot(object):
                     "{}tScan".format(self.i): m.tolist()}
 
             self.log_dict.update(dict)
-            #if self.i < self.MAX_LOG:
-                #rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
+            if self.i < self.MAX_LOG:
+                rospy.loginfo("{}/{}".format(self.i, self.MAX_LOG))
             if self.i == self.MAX_LOG + offset:
                 rospack = rospkg.RosPack()
                 path = rospack.get_path('milestone2')
-                file = path + "/loginfo/log_{}_{}_{}_{}.json".format(NOISE_MOVE_X, NOISE_MOVE_Y, np.rad2deg(NOISE_TURN), NOISE_SENSE)
+                file = path + "/loginfo/log_sim1.json"
                 with open(file, "w") as out_file:
                     json.dump(self.log_dict, out_file, indent=4)
 
