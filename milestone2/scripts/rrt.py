@@ -11,8 +11,8 @@ from copy import copy as copy
 
 #import matplotlib
 #matplotlib.use('Agg')
-#import matplotlib.pyplot as plt
-#from matplotlib import collections as mc
+import matplotlib.pyplot as plt
+from matplotlib import collections as mc
 
 from milestone2.srv import RRTsrv, RRTsrvResponse
 
@@ -22,18 +22,19 @@ from utile import Map
 
 from Queue import PriorityQueue
 
-RADIUS_OBSTACLE = 0.2
+RADIUS_OBSTACLE = 0.3
 RADIUS_TARGET = .07
 PLOT_RADIUS = .05
 RRT_EXTEND_DIST = .2 # 20 CM between two points at most
 SMOOTHING_ITERATIONS = 200
 SMOOTHING_STEP = 0.1
 
-MAP_FILE = "/maps/rss_offset_box1.json"
+MAP_FILE = "/maps/rss_offset.json"
+np.random.seed(0)
 #MAP_FILE = "/maps/rss_offset_box2.json"
+#np.random.seed(3)
 
 # fixed for repeatability
-np.random.seed(1)
 
 class Node(object):
     def __init__(self, parent, position, id):
@@ -80,6 +81,9 @@ class RRT(object):
 
     "Class generating rrt based trajectories"
     def __init__(self, map):
+
+        self.kuka = 0
+
         self.map = map
         self.graph = {}
         self.pose = {}
@@ -89,6 +93,8 @@ class RRT(object):
         s = rospy.Service('rrt', RRTsrv, self.getPath)
         rospy.loginfo('started rrt service')
         rospy.spin()
+
+
 
     def getPath(self, req):
         # TODO: should be extended to desired pose using some kind of
@@ -116,14 +122,29 @@ class RRT(object):
             self.extendGraph(goal)
         path = self.astar(q_init, goal)
 
-        #path = np.array(path)
+        #print("*"*25)
+        #path_ = np.array(path)
+        #d_ = 0
+        #for i, p in enumerate(path_):
+        #    if i < len(path_) - 1:
+        #        d_ += np.linalg.norm(path_[i+1] - p)
+        #print(d_)
         #np.save("path", path)
 
         path = self.smoothingPath(path)
+        #d = 0
+        #for i, p in enumerate(path):
+        #    if i < len(path) - 1:
+        #        d += np.linalg.norm(path[i+1] - p)
+        #print(d)
+        #print("*"*25)
         # Reshape the path to publish on in a single array, this should be reshaped
         # when recieved
         rospy.loginfo("sending path of shape {}".format(path.shape))
-        #self.plotGraph(start= q_init, goal=goal, path=path)
+        #if self.kuka >= 1:
+        #    self.plotGraph(start= q_init, goal=goal, path=path, distance=d)
+        #    self.plotGraph(start= q_init, goal=goal, path=path_, distance=d_)
+        #self.kuka += 1
         path = path.reshape((-1,))
         return RRTsrvResponse(path)
 
@@ -154,7 +175,7 @@ class RRT(object):
         output:
             boolean: True if collision is detected, False otherwise
         """
-        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE) #or self.map.intersectCircle(p, RADIUS_OBSTACLE)
+        return self.map.intersect([p, q], offset=RADIUS_OBSTACLE) or self.map.intersectCircle(q, RADIUS_OBSTACLE) or self.map.intersectCircle(p, RADIUS_OBSTACLE)
 
     def samplePoint(self):
         """Samples a point inside the obstacle this is a guarentie
@@ -386,53 +407,33 @@ class RRT(object):
 
         return smooth_path
 
-    def plotGraph(self, start=None, goal=None, sample=None, path=None):
-        rospy.loginfo("start plotting")
+    def plotGraph(self, start=None, goal=None, sample=None, path=None, distance=None):
         fig, ax = plt.subplots()
-        rospy.loginfo("Plotting map")
         fig, ax = self.map.plotMap(fig, ax)
-        rospy.loginfo("map plotted")
-
-        rospy.loginfo("Plot start")
+        if distance is not None:
+            plt.title("Path of length: {0:.2f}".format(distance))
         if start is not None:
             #Draw start and target points
             circle_start_1 = plt.Circle(start, PLOT_RADIUS, color='g', alpha=0.5)
             plt.gcf().gca().add_artist(circle_start_1)
-
-        rospy.loginfo("Start plotted")
-        rospy.loginfo("Plot goal")
-
         if goal is not None:
             circle_target_1 = plt.Circle(goal, PLOT_RADIUS, color='b', alpha=0.5)
             plt.gcf().gca().add_artist(circle_target_1)
-
-        rospy.loginfo("goal plotted")
-        rospy.loginfo("Plot sample")
-
         if sample is not None:
             circle_target_1 = plt.Circle(sample, PLOT_RADIUS, color='r', alpha=0.5)
             plt.gcf().gca().add_artist(circle_target_1)
 
-        rospy.loginfo("Sample plotted")
-        rospy.loginfo("Plot tree")
         #Draw tree
         for key in self.graph:
             pose = self.pose[key]
             for edge in self.graph[key]:
                 pose_edge = self.pose[edge]
                 plt.plot([pose_edge[0], pose[0]], [pose_edge[1], pose[1]], color='y', marker='.')
-
-        rospy.loginfo("Tree plotted")
-
-        rospy.loginfo("Plot path")
-
         if path is not None:
             for node in path:
                 circle_target_1 = plt.Circle(node, RADIUS_OBSTACLE, color='r', alpha=0.5)
                 plt.gcf().gca().add_artist(circle_target_1)
                 #plt.scatter(node[0], node[1], color='r', marker='.')
-
-        rospy.loginfo("Path plotted")
 
         plt.axis('scaled')
         plt.grid()
