@@ -8,7 +8,7 @@ import numpy as np
 import scipy.signal as sig
 
 MAP_FILE = "maps/rss_offset.json"
-MAX_LOG = 1200
+MAX_LOG = 1000
 map = Map(MAP_FILE)
 
 
@@ -21,18 +21,12 @@ def parseFileParticle(file):
         t = []
         s = []
         m = []
-        path = []
-        path.append(data["0path"])
-        path.append(data["1path"])
-        path.append(data["2path"])
-        path.append(data["3path"])
-        path.append(data["4path"])
-
-        path_np = np.array(data["0path"])
-        path_np = np.vstack((path_np, np.array(data["1path"])))
-        path_np = np.vstack((path_np, np.array(data["2path"])))
-        path_np = np.vstack((path_np, np.array(data["3path"])))
-        path_np = np.vstack((path_np, np.array(data["4path"])))
+        path_np = None
+        if "0path" in data.keys():
+            path_np = np.array(data["0path"])
+        for i in range(1, 5):
+            if "{}path".format(i) in data.keys():
+                path_np = np.vstack((path_np, np.array(data["{}path".format(i)])))
 
         for i in np.arange(1, MAX_LOG):
             r.append(data["{}rPose".format(i)])
@@ -83,7 +77,8 @@ def parseFileParticle(file):
                 '''
                 #for p in path:
                     #p = np.array(p)
-                ax.plot(path_np[:, 0], path_np[:, 1], c='g', label="trajectory", linewidth=2)
+                if path_np is not None:
+                    ax.plot(path_np[:, 0], path_np[:, 1], c='g', label="trajectory", linewidth=2)
                 ax.legend()
                 plt.title("True position of the robot w.r.t the planned trajectory")
                 plt.draw()
@@ -91,51 +86,57 @@ def parseFileParticle(file):
 
     r = np.array(r)
     t = np.array(t)
+    #r[:, 2] = ((r[:, 2] + np.pi) % (2*np.pi)) - np.pi
+    #t[:, 2] = ((t[:, 2] + np.pi) % (2*np.pi)) - np.pi
     m = np.array(m).reshape(-1, 8)
     s = np.array(s)
-    print(path_np.shape)
     #print(p.shape)
 
-    fs = 5.
-    cutoff = 0.2
-    order = 5.
+    #fs = 5.
+    #cutoff = 0.2
+    #order = 5.
 
-    nyquist = fs / 2.
+    #nyquist = fs / 2.
 
-    b, a = sig.butter(order, cutoff / nyquist)
-    if not np.all(np.abs(np.roots(a)) < 1):
-        raise PsolaError('Filter with cutoff at {} Hz is unstable given '
-                         'sample frequency {} Hz'.format(cutoff, fs))
-    r_x = sig.filtfilt(b, a, r[:, 0], method='gust')
-    r_y = sig.filtfilt(b, a, r[:, 1], method='gust')
-    r_yaw = sig.filtfilt(b, a, r[:, 2], method='gust')
+    #b, a = sig.butter(order, cutoff / nyquist)
+    #if not np.all(np.abs(np.roots(a)) < 1):
+    #    raise PsolaError('Filter with cutoff at {} Hz is unstable given '
+    #                     'sample frequency {} Hz'.format(cutoff, fs))
+    #r_x = sig.filtfilt(b, a, r[:, 0], method='gust')
+    #r_y = sig.filtfilt(b, a, r[:, 1], method='gust')
+    #r_yaw = sig.filtfilt(b, a, r[:, 2], method='gust')
 
     diff = m - s
 
     fig, ax = plt.subplots(2, 2)
     x = range(1, MAX_LOG)
-    ax[0, 0].plot(x, r[:, 0], 'r')
-    ax[0, 0].plot(x, r_x, 'k')
-    ax[0, 0].plot(x, t[:, 0], 'b')
+    ax[0, 0].plot(x, r[:, 0], 'r', label="estimated")
+    #ax[0, 0].plot(x, r_x, 'k')
+    ax[0, 0].plot(x, t[:, 0], 'b', label="ground truth")
     #ax[0, 0].plot(x, path_np[:, 0], 'g')
     ax[0, 0].set_xlabel("Step")
     ax[0, 0].set_ylabel("Position (m)")
     ax[0, 0].set_title("X position")
+    ax[0, 0].legend()
 
-    ax[0, 1].plot(x, r[:, 1], 'r')
-    ax[0, 1].plot(x, r_y, 'k')
-    ax[0, 1].plot(x, t[:, 1], 'b')
+    ax[0, 1].plot(x, r[:, 1], 'r', label="estimated")
+    #ax[0, 1].plot(x, r_y, 'k')
+    ax[0, 1].plot(x, t[:, 1], 'b', label="ground truth")
     #ax[0, 0].plot(x, path_np[:, 1], 'g')
     ax[0, 1].set_xlabel("Step")
     ax[0, 1].set_ylabel("Position (m)")
     ax[0, 1].set_title("Y position")
+    ax[0, 1].legend()
 
-    ax[1, 0].plot(x, r[:,2], 'r')
-    ax[1, 0].plot(x, r_yaw, 'k')
-    ax[1, 0].plot(x, t[:,2], 'b')
+    ax[1, 0].plot(x, r[:,2], 'r', label="estimated")
+    #ax[1, 0].plot(x, r_yaw, 'k')
+    ax[1, 0].plot(x, t[:,2], 'b', label="ground truth")
     ax[1, 0].set_xlabel("Step")
     ax[1, 0].set_ylabel("Position (m)")
     ax[1, 0].set_title("Yaw position")
+    ax[1, 0].legend()
+
+    ax[1, 1].set_visible(False)
 
     fig.suptitle("Pose evolution")
 
@@ -151,45 +152,53 @@ def parseFileParticle(file):
     ax2[3, 1].plot(x, diff[:, 7], 'g')
     '''
 
-    ax2[0, 0].plot(x, m[:, 0], 'r')
-    ax2[0, 0].plot(x, s[:, 0], 'b')
+    ax2[0, 0].plot(x, m[:, 0], 'r', label="expected")
+    ax2[0, 0].plot(x, s[:, 0], 'b', label="real")
     ax2[0, 0].set_xlabel("Step")
     ax2[0, 0].set_ylabel("Reading (m)")
+    ax2[0, 0].legend()
 
-    ax2[0, 1].plot(x, m[:, 1], 'r')
-    ax2[0, 1].plot(x, s[:, 1], 'b')
+    ax2[0, 1].plot(x, m[:, 1], 'r', label="expected")
+    ax2[0, 1].plot(x, s[:, 1], 'b', label="real")
     ax2[0, 1].set_xlabel("Step")
     ax2[0, 1].set_ylabel("Reading (m)")
+    ax2[0, 1].legend()
 
-    ax2[1, 0].plot(x, m[:, 2], 'r')
-    ax2[1, 0].plot(x, s[:, 2], 'b')
+    ax2[1, 0].plot(x, m[:, 2], 'r', label="expected")
+    ax2[1, 0].plot(x, s[:, 2], 'b', label="real")
     ax2[1, 0].set_xlabel("Step")
     ax2[1, 0].set_ylabel("Reading (m)")
+    ax2[1, 0].legend()
 
-    ax2[1, 1].plot(x, m[:, 3], 'r')
-    ax2[1, 1].plot(x, s[:, 3], 'b')
+    ax2[1, 1].plot(x, m[:, 3], 'r', label="expected")
+    ax2[1, 1].plot(x, s[:, 3], 'b', label="real")
     ax2[1, 1].set_xlabel("Step")
     ax2[1, 1].set_ylabel("Reading (m)")
+    ax2[1, 1].legend()
 
-    ax2[2, 0].plot(x, m[:, 4], 'r')
-    ax2[2, 0].plot(x, s[:, 4], 'b')
+    ax2[2, 0].plot(x, m[:, 4], 'r', label="expected")
+    ax2[2, 0].plot(x, s[:, 4], 'b', label="real")
     ax2[2, 0].set_xlabel("Step")
     ax2[2, 0].set_ylabel("Reading (m)")
+    ax2[2, 0].legend()
 
-    ax2[2, 1].plot(x, m[:, 5], 'r')
-    ax2[2, 1].plot(x, s[:, 5], 'b')
+    ax2[2, 1].plot(x, m[:, 5], 'r', label="expected")
+    ax2[2, 1].plot(x, s[:, 5], 'b', label="real")
     ax2[2, 1].set_xlabel("Step")
     ax2[2, 1].set_ylabel("Reading (m)")
+    ax2[2, 1].legend()
 
-    ax2[3, 0].plot(x, m[:, 6], 'r')
-    ax2[3, 0].plot(x, s[:, 6], 'b')
+    ax2[3, 0].plot(x, m[:, 6], 'r', label="expected")
+    ax2[3, 0].plot(x, s[:, 6], 'b', label="real")
     ax2[3, 0].set_xlabel("Step")
     ax2[3, 0].set_ylabel("Reading (m)")
+    ax2[3, 0].legend()
 
-    ax2[3, 1].plot(x, m[:, 7], 'r')
-    ax2[3, 1].plot(x, s[:, 7], 'b')
+    ax2[3, 1].plot(x, m[:, 7], 'r', label="expected")
+    ax2[3, 1].plot(x, s[:, 7], 'b', label="real")
     ax2[3, 1].set_xlabel("Step")
     ax2[3, 1].set_ylabel("Reading (m)")
+    ax2[3, 1].legend()
 
     fig2.suptitle("Measurements")
     plt.show()
